@@ -29,7 +29,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
-  gap: 14px;
+  gap: 16px;
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -56,19 +56,46 @@
   gap: 8px;
 }
 
+/* Select and input share one look: same height, border, and an inset focus ring
+   (no outline offset, so a focused control doesn't look bigger than its neighbours). */
 .field select,
 .field input {
   height: 44px;
   padding: 0 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg);
+  background-color: var(--bg);
   color: var(--text);
   font-size: 15px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.field select:hover,
+.field input:hover {
+  border-color: #3b4252;
+}
+
+.field select:focus-visible,
+.field input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Custom chevron instead of the native arrow pinned to the edge. */
 .field select {
   min-width: 200px;
+  padding-right: 38px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%238d94a1' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  cursor: pointer;
+}
+
+.field select:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .field input {
@@ -119,12 +146,11 @@
   border: 1px solid var(--border);
   border-radius: 16px;
   background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 55%);
-  transition: border-color 0.15s, transform 0.15s;
+  transition: border-color 0.15s;
 }
 
 .card:hover {
   border-color: #3b4252;
-  transform: translateY(-2px);
 }
 
 .cardHeader {

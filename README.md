@@ -1,33 +1,109 @@
-# FormCoach AI (demo)
+# FormCoach AI
 
-A local demo of a camera-based exercise coach. The browser detects your skeleton with MediaPipe,
-counts reps, checks form, and saves every session and rep to PostgreSQL.
-Supported exercises: squat, bicep curl, shoulder press.
+A camera-based exercise coach that runs on your own computer. Stand in front of your webcam and
+do **squats**, **bicep curls** or **shoulder presses** — the app tracks your body, counts only
+clean reps, tells you (on screen) what to fix, and saves every workout.
 
-The full spec and backlog live in [CLAUDE.md](CLAUDE.md).
+Your video never leaves your computer: the body tracking runs inside the browser.
 
-## Requirements
+---
 
-- Docker Desktop (Apple Silicon is fine)
-- A webcam and Chrome / Edge / Safari
+## 1. What you need (install once)
 
-## Run
+| What | Why | How to get it |
+| --- | --- | --- |
+| **Docker Desktop** | Runs the whole app (database, server, website) — nothing else to install | [Download for Mac / Windows](https://www.docker.com/products/docker-desktop/). **Linux:** [Docker Engine](https://docs.docker.com/engine/install/) + the Compose plugin |
+| **Git** *(optional)* | To download the code | macOS: already installed (or run `xcode-select --install`). Windows: [Git for Windows](https://git-scm.com/download/win) — it also gives you **Git Bash**. Or skip Git and use **Code → Download ZIP** on GitHub |
+| **A terminal with bash** | To run the start script | macOS / Linux: the built-in **Terminal**. Windows: **Git Bash** (comes with Git for Windows) or WSL |
+| **Chrome or Edge + a webcam** | To use the app | A laptop's built-in camera is fine |
+
+You do **not** need Python, Node.js, PostgreSQL, VS Code or any programming knowledge — everything
+runs inside Docker. Give Docker about 5 GB of free disk space.
+
+## 2. Start the app (3 steps)
+
+1. **Get the code** and open a terminal in it:
+
+   ```bash
+   git clone https://github.com/yavarguliyev/ai-form-coach.git
+   cd ai-form-coach
+   ```
+
+   (Downloaded the ZIP instead? Unzip it, then open a terminal inside the unzipped folder.)
+
+2. **Open Docker Desktop** and wait until it says it is running.
+
+3. **Run the start script:**
+
+   ```bash
+   bash infra/start.sh
+   ```
+
+The script checks everything, builds the app, waits until it is ready and opens
+**http://localhost:5180** in your browser. The **first start takes a few minutes** (it downloads
+about 1 GB); later starts take seconds. When the browser asks for the camera, click **Allow**.
+
+## 3. Everyday commands
+
+Run these from the project folder:
+
+| I want to… | Command | My saved workouts |
+| --- | --- | --- |
+| Start the app | `bash infra/start.sh` | kept |
+| Restart it (stuck, or after updating the code) | `bash infra/restart.sh` | kept |
+| Remove it completely (containers, images, data) | `bash infra/remove.sh` | **deleted** (asks first) |
+
+`remove.sh` only removes FormCoach's own Docker containers, network, volume and images. It never
+touches other Docker projects, and it keeps a base image (like `postgres`) if another project uses it.
+
+## 4. Using the app
+
+1. On **Exercises**, pick who is training (or add a new person), then choose an exercise.
+2. Stand where the camera can see you — **sideways** for squats and curls, **facing the camera**
+   for the shoulder press. A checklist turns green when you're in position, then a 3-2-1
+   countdown starts by itself.
+3. Exercise. Reps that count show up in the big counter; mistakes and reps that don't count are
+   shown on the video. Press **Finish set** when you're done.
+4. **History** will show your past workouts and progress charts (coming soon).
+
+Tip: press **D** during a workout to open the debug panel (live angles and tuning sliders).
+
+| Page | Address |
+| --- | --- |
+| The app | http://localhost:5180 — always use `localhost`, not your IP address (browsers only allow the camera there) |
+| API documentation | http://localhost:8010/docs |
+| Database viewer (Adminer) | http://localhost:8090 — System **PostgreSQL**, Server **db**, user / password / database **formcoach** |
+
+## 5. Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| `Docker is not installed` / `not running` | Install Docker Desktop (step 1) and start it. Wait for it to say *running*, then run the script again. |
+| `A required port is busy` | Another program uses 5180, 8010, 55432 or 8090. Close it, or change the port in the `.env` file (created on first start) and run `bash infra/restart.sh`. |
+| "Camera access is blocked" | Click the camera icon in the address bar → **Allow**. On macOS also check **System Settings → Privacy & Security → Camera** for your browser. Close other apps using the camera (Zoom, Teams…). |
+| It doesn't count my reps | Make sure your whole body (or both arms for the press) is in view and well lit, 2–3 m from the camera. The message on the video tells you what it can't see. |
+| Windows: `bash: command not found` | Run the commands in **Git Bash**, not in Command Prompt or PowerShell. |
+| Linux: `permission denied` from Docker | Run `sudo usermod -aG docker $USER`, log out and in again. |
+| Anything else | `bash infra/restart.sh`. Still broken? `bash infra/remove.sh`, then `bash infra/start.sh` for a clean install (deletes saved workouts). |
+
+---
+
+## For developers
+
+The full spec, architecture and backlog live in [CLAUDE.md](CLAUDE.md). The `Makefile` wraps the
+same Docker commands for day-to-day work:
 
 ```bash
-make check-ports   # verify host ports 5180, 8010, 55432, 8090 are free
-make up            # build and start everything
+make up          # check ports, build and start (detached)
+make test        # error-code check + backend pytest + frontend vitest (inside the containers)
+make logs        # follow logs
+make down        # stop (data kept)
+make reset       # wipe this project's database volume and start again
+make seed        # re-run the idempotent seed
 ```
 
-| What      | URL                                                           |
-| --------- | ------------------------------------------------------------- |
-| App       | http://localhost:5180 (use `localhost`, not the IP — camera)  |
-| API docs  | http://localhost:8010/docs                                    |
-| Adminer   | http://localhost:8090 (PostgreSQL, server `db`, `formcoach`)  |
-| DB (host) | `localhost:55432`                                             |
-
-Other commands: `make down`, `make logs`, `make ps`, `make test`, `make seed`, `make reset`.
-
-Ports are configured in `.env` (copied from `.env.example` on first run).
+Ports and passwords are configured in `.env` (created from `.env.example`). Host DB access:
+`localhost:55432`.
 
 ## Progress
 
@@ -95,3 +171,5 @@ Mirrors the backlog in [CLAUDE.md §13](CLAUDE.md). Updated after every ticket.
 - [ ] S-04 Export session as PDF/CSV
 
 **Tests:** `make test` — 59 backend + 204 frontend (engine, sync) tests, plus the error-code check.
+
+**Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

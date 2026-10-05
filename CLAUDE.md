@@ -86,6 +86,11 @@ argus/
 ├── docker-compose.yml
 ├── .env.example
 ├── Makefile                       # make up / down / logs / test / seed / reset
+├── infra/                         # one-command scripts for non-developers (bash)
+│   ├── start.sh                   # checks Docker/ports, builds, waits until healthy, opens the app
+│   ├── restart.sh                 # down (data kept) + start.sh
+│   ├── remove.sh                  # removes ONLY this project's containers, network, volume, images
+│   └── common.sh                  # shared helpers
 ├── backend/
 │   ├── Dockerfile
 │   ├── pyproject.toml (or requirements.txt)
@@ -564,6 +569,9 @@ color. Responsive enough for a laptop screen; mobile is not required.
 ---
 
 ## 10. Commands
+
+For non-developers: `bash infra/start.sh`, `bash infra/restart.sh`, `bash infra/remove.sh`
+(see README). Developer shortcuts:
 
 ```
 make check-ports  # verify 5180, 8010, 55432, 8090 are free

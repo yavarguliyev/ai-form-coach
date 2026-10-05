@@ -65,9 +65,12 @@ touches other Docker projects, and it keeps a base image (like `postgres`) if an
    for the shoulder press. A checklist turns green when you're in position, then a 3-2-1
    countdown starts by itself.
 3. Exercise. The counters show **Reps** (counted), **Good** and **Missed**. Mistakes and reps that
-   don't count are shown on the video and spoken. Press **Finish set** when you're done — the
-   summary lists every attempt and your set score.
-4. **History** shows your past sets, progress charts and most common mistakes per exercise.
+   don't count are shown on the video and spoken.
+4. **The set ends by itself** — no need to put the weights down and touch the screen: stop for
+   10 seconds, or step out of view for 5 seconds, or reach your **target reps** (pick one on the
+   setup card). A 3-second countdown appears first; do another rep to keep going. **Finish set**
+   still works too. The summary lists every attempt and your set score.
+5. **History** shows your past sets, progress charts and most common mistakes per exercise.
 
 Tip: press **D** during a workout to open the debug panel (live angles and tuning sliders).
 
@@ -240,6 +243,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 ### After live testing
 
 - [x] Every attempt is recorded — missed reps are shown, spoken, saved and scored 0 (set score); voice no longer cuts off mistakes
+- [x] Sets end by themselves — after a 10 s rest, 5 s out of view, or an optional target rep count, with a 3 s cancelable countdown
 
 ### Stretch
 
@@ -248,6 +252,6 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [ ] S-03 Fourth exercise
 - [ ] S-04 Export session as PDF/CSV
 
-**Tests:** `make test` — 78 backend + 222 frontend (engine, sync, voice) tests, plus the error-code check.
+**Tests:** `make test` — 78 backend + 235 frontend (engine, sync, voice) tests, plus the error-code check.
 
 **Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

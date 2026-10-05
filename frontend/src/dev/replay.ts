@@ -31,6 +31,18 @@ export const SCENARIOS: Record<string, () => SyntheticFrame[]> = {
   // the user's example: 3 clean squats, then 9 half squats (to ~125°)
   'squat-misses': () =>
     generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 3), repeat(sweep(170, 125, 2000), 9), hold(170, 4000)), torsoLean: 10 }, { noisePx: 1 }),
+  // auto-finish: 4 squats then stand still (rest timer)
+  'squat-then-rest': () =>
+    generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 4), hold(170, 30000)), torsoLean: 10 }, { noisePx: 1 }),
+  // auto-finish: 3 squats then walk out of the frame
+  'squat-then-leave': () =>
+    generateSquat(
+      { knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 3), hold(170, 30000)), torsoLean: 10 },
+      { noisePx: 1, drops: [{ fromMs: 6000 + 3 * 2000 + 600, toMs: 99999, noPerson: true }] },
+    ),
+  // auto-finish cancel: 2 squats, an 8.5 s pause (warning shows), 2 more squats, then rest
+  'squat-pause-resume': () =>
+    generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 2), hold(170, 8500), repeat(S_REP, 2), hold(170, 30000)), torsoLean: 10 }, { noisePx: 1 }),
   // endless clean squats (for long-running persistence tests)
   'squat-loop': () => generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 60)), torsoLean: 10 }, { noisePx: 1 }),
   'curl-clean': () => generateCurl({ elbow: timeline(STAND, hold(170, 3500), repeat(sweep(170, 35, 2000), 5), hold(170, 3000)) }, { noisePx: 1 }),

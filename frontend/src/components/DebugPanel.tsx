@@ -1,4 +1,5 @@
 import type { AnalyzerOutput } from '../engine/analyzer';
+import { AWAY_FINISH_MS, REST_FINISH_MS } from '../engine/autoFinish';
 import type { ExerciseDefinition } from '../engine/exercises/types';
 import { BODY_LANDMARKS, LANDMARK_NAMES, type Landmark } from '../engine/landmarks';
 import type { RepThresholds } from '../engine/repCounter';
@@ -18,6 +19,8 @@ export interface DebugInfo {
 export interface Tuning {
   thresholds: RepThresholds;
   limits: Record<string, number>;
+  /** Auto-finish timers (ms): no rep for restMs / out of view for awayMs ends the set. */
+  autoFinish: { restMs: number; awayMs: number };
 }
 
 interface Props {
@@ -140,6 +143,27 @@ export function DebugPanel({ info, definition, tuning, tuningError, onTuningChan
           onChange={(v) => onTuningChange({ ...tuning, limits: { ...tuning.limits, [l.key]: v } })}
         />
       ))}
+      <h3>Auto-finish</h3>
+      <Slider
+        label="End set after no rep for"
+        value={tuning.autoFinish.restMs / 1000}
+        min={5}
+        max={30}
+        step={1}
+        unit=" s"
+        isDefault={tuning.autoFinish.restMs === REST_FINISH_MS}
+        onChange={(v) => onTuningChange({ ...tuning, autoFinish: { ...tuning.autoFinish, restMs: v * 1000 } })}
+      />
+      <Slider
+        label="End set after out of view for"
+        value={tuning.autoFinish.awayMs / 1000}
+        min={4}
+        max={20}
+        step={1}
+        unit=" s"
+        isDefault={tuning.autoFinish.awayMs === AWAY_FINISH_MS}
+        onChange={(v) => onTuningChange({ ...tuning, autoFinish: { ...tuning.autoFinish, awayMs: v * 1000 } })}
+      />
       {tuningError && <p className={styles.error}>{tuningError}</p>}
       <button type="button" className={`btn btn-secondary ${styles.resetBtn}`} onClick={onResetTuning}>
         Reset to defaults

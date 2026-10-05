@@ -6,6 +6,7 @@ import { CameraError } from '../components/CameraError';
 import { DebugPanel, type DebugInfo, type Tuning } from '../components/DebugPanel';
 import { drawSkeleton } from '../components/skeleton';
 import { VideoCanvas } from '../components/VideoCanvas';
+import { AWAY_FINISH_MS, REST_FINISH_MS, createAutoFinish, type AutoFinish, type AutoFinishStatus, type FinishReason } from '../engine/autoFinish';
 import { createAnalyzer, type Analyzer, type AnalyzerOutput, type CompletedRep, type MissedAttempt } from '../engine/analyzer';
 import { CUE_TEXT, type ErrorCode } from '../engine/errorCodes';
 import { getExercise } from '../engine/exercises';
@@ -120,8 +121,30 @@ function syncText(s: SyncStatus | null, hasUser: boolean): { text: string; tone:
 }
 
 function initialTuning(def: ExerciseDefinition): Tuning {
-  return { thresholds: { ...def.thresholds }, limits: defaultLimits(def) };
+  return {
+    thresholds: { ...def.thresholds },
+    limits: defaultLimits(def),
+    autoFinish: { restMs: REST_FINISH_MS, awayMs: AWAY_FINISH_MS },
+  };
 }
+
+const TARGET_OPTIONS = [null, 5, 8, 10, 12, 15] as const;
+const TARGET_KEY = 'formcoach.targetReps';
+
+function readTarget(): number | null {
+  try {
+    const v = Number(localStorage.getItem(TARGET_KEY));
+    return TARGET_OPTIONS.includes(v as (typeof TARGET_OPTIONS)[number]) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+const FINISH_SAY: Record<FinishReason, string> = {
+  rest: 'Finishing the set. Do another rep to keep going.',
+  away: 'Finishing the set.',
+  target: 'Set complete!',
+};
 
 function isTyping(target: EventTarget | null): boolean {
   return (
@@ -161,8 +184,26 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
   // --- tuning → analyzer -------------------------------------------------------
   const [tuning, setTuning] = useState<Tuning>(() => initialTuning(definition));
+  const tuningRef = useRef(tuning);
+  tuningRef.current = tuning;
   const [tuningError, setTuningError] = useState<string | null>(null);
   const analyzerRef = useRef<Analyzer>(createAnalyzer(definition));
+
+  // --- auto-finish (hands are full of weights) ------------------------------------------
+  const [targetReps, setTargetReps] = useState<number | null>(readTarget);
+  const targetRef = useRef(targetReps);
+  targetRef.current = targetReps;
+  const autoFinishRef = useRef<AutoFinish>(createAutoFinish());
+  const autoStatusRef = useRef<AutoFinishStatus>({ phase: 'idle' });
+  const finishRef = useRef<() => void>(() => {});
+  const chooseTarget = (t: number | null) => {
+    setTargetReps(t);
+    try {
+      localStorage.setItem(TARGET_KEY, t ? String(t) : '');
+    } catch {
+      // not persisted — fine
+    }
+  };
   const logRef = useRef<LogEntry[]>([]);
   const cueRef = useRef<{ code: ErrorCode; atMs: number } | null>(null);
   // Latest event message (cue, counted rep, rejected rep), shown for CUE_VISIBLE_MS.
@@ -295,6 +336,26 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           logRef.current = [{ kind: 'missed' as const, miss: m }, ...logRef.current].slice(0, LOG_LIMIT);
           syncRef.current?.enqueue(toMissCreate(m));
         }
+
+        // Auto-finish: rest / walked away / target reached.
+        const prev = autoStatusRef.current;
+        const status = autoFinishRef.current.update({
+          timestampMs: now,
+          state: out.state,
+          visibilityOk: out.visibilityOk,
+          attempts: out.repCount + out.missedCount + out.unseenCount,
+          repCount: out.repCount,
+        });
+        autoStatusRef.current = status;
+        // Say it once when the warning starts (and "Set complete!" when the target is hit).
+        if (
+          !mutedRef.current &&
+          ((status.phase === 'warning' && prev.phase !== 'warning') ||
+            (status.phase === 'finish' && status.reason === 'target'))
+        ) {
+          speak([{ text: FINISH_SAY[status.reason] }]);
+        }
+        if (status.phase === 'finish') setTimeout(() => finishRef.current(), status.reason === 'target' ? 900 : 0);
       }
 
       const cueActive = live && cueRef.current !== null && now - cueRef.current.atMs < CUE_VISIBLE_MS;
@@ -338,8 +399,9 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     notice: { text: string; tone: Tone } | null;
     log: LogEntry[];
     goodReps: number;
+    auto: AutoFinishStatus;
     debug: DebugInfo | null;
-  }>({ out: null, notice: null, log: [], goodReps: 0, debug: null });
+  }>({ out: null, notice: null, log: [], goodReps: 0, auto: { phase: 'idle' }, debug: null });
 
   useEffect(() => {
     if (model.status !== 'ready') return;
@@ -352,6 +414,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
         notice: notice && now - notice.atMs < CUE_VISIBLE_MS ? { text: notice.text, tone: notice.tone } : null,
         log: logRef.current,
         goodReps: goodCountRef.current,
+        auto: autoStatusRef.current,
         debug: {
           fps: fpsRef.current.fps,
           delegate: model.delegate,
@@ -399,6 +462,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
         clearInterval(id);
         // Fresh set: counting starts now (the user must hold the start position again).
         analyzerRef.current.reset();
+        autoFinishRef.current = createAutoFinish({ ...tuningRef.current.autoFinish, targetReps: targetRef.current });
+        autoStatusRef.current = { phase: 'idle' };
         clearSetState();
         startSync();
         setPhase('live');
@@ -418,7 +483,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
       setPhase('done'); // nothing to save (no user selected)
       return;
     }
-    stopSpeaking();
+    if (autoStatusRef.current.phase !== 'finish' || autoStatusRef.current.reason !== 'target') stopSpeaking();
     setPhase('saving');
     setSaveError(null);
     try {
@@ -431,6 +496,10 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           : `Could not finish the session: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
+  };
+
+  finishRef.current = () => {
+    if (phaseRef.current === 'live') void finish();
   };
 
   const discardSet = () => {
@@ -528,6 +597,17 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                   )}
                 </div>
               )}
+              {phase === 'live' && ui.auto.phase === 'warning' && (
+                <div className={styles.endingOverlay} data-auto-finish={ui.auto.reason} role="alert">
+                  <span className={styles.endingCount}>{Math.max(1, Math.ceil(ui.auto.remainingMs / 1000))}</span>
+                  <span className={styles.endingText}>
+                    {ui.auto.reason === 'away' ? 'Set ends — you left the frame' : 'Set ends — no reps for a while'}
+                  </span>
+                  <span className={styles.endingHint}>
+                    {ui.auto.reason === 'away' ? 'Step back in to keep going' : 'Start a rep to keep going'}
+                  </span>
+                </div>
+              )}
               {model.status === 'error' && (
                 <div className={`${styles.overlay} ${overlayPos} ${styles.error}`}>Pose detection unavailable: {model.detail}</div>
               )}
@@ -547,6 +627,28 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                     label={definition.cameraView === 'side' ? 'Standing sideways' : 'Facing the camera'}
                   />
                 </ul>
+                <div className={styles.target} role="radiogroup" aria-label="Target reps">
+                  <span className={styles.targetLabel}>Target reps</span>
+                  <div className={styles.targetOptions}>
+                    {TARGET_OPTIONS.map((t) => (
+                      <button
+                        key={t ?? 'off'}
+                        type="button"
+                        role="radio"
+                        aria-checked={targetReps === t}
+                        className={targetReps === t ? styles.targetOn : styles.targetOff}
+                        onClick={() => chooseTarget(t)}
+                        data-target={t ?? 'off'}
+                      >
+                        {t ?? 'Off'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className={styles.autoNote}>
+                  The set ends by itself {targetReps ? `after ${targetReps} counted reps, ` : ''}if you stop for{' '}
+                  {tuning.autoFinish.restMs / 1000} s or step out of view — no need to touch the screen.
+                </p>
                 <p className={setupReady ? styles.readyText : styles.muted} data-setup-status>
                   {setupReady ? 'Ready — starting…' : 'The countdown starts by itself once everything is green.'}
                 </p>
@@ -570,7 +672,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                     <span className={styles.counterValue} data-rep-count>
                       {repCount}
                     </span>
-                    <span className={styles.counterLabel}>Reps</span>
+                    <span className={styles.counterLabel}>{targetReps ? `Reps / ${targetReps}` : 'Reps'}</span>
                   </div>
                   <div className={styles.counter}>
                     <span className={`${styles.counterValue} ${styles.good}`} data-good-count>

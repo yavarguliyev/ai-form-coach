@@ -222,13 +222,13 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [x] T-27 Voice & feedback — spoken rep counts and cues (3 s cooldown), "Great rep!", mute button (`M`)
 - [x] T-28 Summary page — totals, per-rep table, most common mistake with a tip, delete
 
-### Milestone 6 — History & polish
+### Milestone 6 — History & polish ✅
 
 - [x] T-29 History page — exercise tabs, stat tiles, score line + reps-per-set charts (Recharts), sets table, top mistakes
 - [x] T-30 Visual polish — fits the screen while exercising, one friendly "server unreachable" notice that recovers by itself, 404 page, page titles, favicon
 - [x] T-31 Demo data — `make demo-data` / `bash infra/demo-data.sh` (tagged example sets; real ones untouched)
 - [x] T-32 README & presentation script — install guide, how it works, troubleshooting, 5-minute demo script
-- [ ] T-33 Final verification from a fresh clone
+- [x] T-33 Final verification — fresh clone from GitHub → `start.sh` → `make reset` → all tests → every exercise end to end → data checked in the DB
 
 ### Stretch
 

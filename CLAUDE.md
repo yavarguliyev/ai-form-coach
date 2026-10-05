@@ -606,7 +606,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
       _AC:_ migration runs automatically on backend start; tables visible in Adminer.
 - [x] **T-06 Seed** — 3 exercises + `Demo User`, idempotent.
       _AC:_ restarting the backend doesn't duplicate rows.
-- [ ] **T-07 Users & exercises endpoints** — per §7.
+- [x] **T-07 Users & exercises endpoints** — per §7.
 - [ ] **T-08 Sessions & reps endpoints** — create, add rep, finish (server-side aggregates), list, get, delete.
       _AC:_ validation errors return 422; posting to finished session returns 409; aggregates correct.
 - [ ] **T-09 Stats endpoint** — `/api/users/{id}/stats` per §7.

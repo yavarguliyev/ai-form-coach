@@ -17,7 +17,7 @@ ADMINER_PORT  ?= 8090
 
 COMPOSE := docker compose -p formcoach
 
-.PHONY: help check-ports up down logs test seed reset ps
+.PHONY: help check-ports check-codes up down logs test seed reset ps
 
 help:
 	@echo "make check-ports  verify $(FRONTEND_PORT), $(BACKEND_PORT), $(DB_HOST_PORT), $(ADMINER_PORT) are free"
@@ -25,7 +25,7 @@ help:
 	@echo "make down         stop the stack"
 	@echo "make logs         follow logs"
 	@echo "make ps           list this project's containers"
-	@echo "make test         run backend pytest + frontend vitest inside containers"
+	@echo "make test         check-codes, then backend pytest + frontend vitest inside containers"
 	@echo "make seed         re-run the idempotent seed"
 	@echo "make reset        wipe ONLY this project's DB volume, then up"
 
@@ -71,9 +71,13 @@ logs:
 ps:
 	$(COMPOSE) ps
 
-test:
+test: check-codes
 	$(COMPOSE) exec -T backend pytest -q
 	$(COMPOSE) exec -T frontend npm test
+
+# Frontend engine and backend API must agree on the rep error codes.
+check-codes:
+	@python3 scripts/check_error_codes.py
 
 seed:
 	$(COMPOSE) exec -T backend python -m app.seed

@@ -151,7 +151,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [x] T-24 Home page — user picker/creator, exercise cards
 - [x] T-25 Workout page — setup checklist, 3-2-1 countdown, live counters, banner, angle gauge
 - [x] T-26 Persist session — reps saved live with a retry queue (survives a backend outage)
-- [ ] T-27 Voice & feedback — spoken rep counts and cues, mute toggle
+- [x] T-27 Voice & feedback — spoken rep counts and cues (3 s cooldown), "Great rep!", mute button (`M`)
 - [ ] T-28 Summary page
 
 ### Milestone 6 — History & polish
@@ -169,6 +169,6 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [ ] S-03 Fourth exercise
 - [ ] S-04 Export session as PDF/CSV
 
-**Tests:** `make test` — 59 backend + 204 frontend (engine, sync) tests, plus the error-code check.
+**Tests:** `make test` — 59 backend + 213 frontend (engine, sync, voice) tests, plus the error-code check.
 
 **Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

@@ -15,6 +15,8 @@ import { validateThresholds, type RejectReason, type RepState } from '../engine/
 import { isGoodRep } from '../engine/scoring';
 import { useCamera } from '../pose/useCamera';
 import { usePoseLandmarker, type PoseFrame } from '../pose/usePoseLandmarker';
+import { readMuted, speak, speechAvailable, stopSpeaking, writeMuted } from '../feedback/voice';
+import { createVoicePolicy } from '../feedback/voicePolicy';
 import { useUser } from '../state/UserContext';
 import { FinishTimeoutError, createSessionSync, type SessionSync, type SyncStatus } from '../sync/sessionSync';
 import styles from './WorkoutPage.module.css';
@@ -148,8 +150,24 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   // Counted separately: the log only keeps the last LOG_LIMIT entries.
   const goodCountRef = useRef(0);
 
+  // --- voice (§8.9) ----------------------------------------------------------------
+  const voicePolicyRef = useRef(createVoicePolicy());
+  const [muted, setMuted] = useState(readMuted);
+  const mutedRef = useRef(muted);
+  mutedRef.current = muted;
+  const toggleMute = useCallback(() => {
+    setMuted((m) => {
+      const next = !m;
+      writeMuted(next);
+      if (next) stopSpeaking();
+      return next;
+    });
+  }, []);
+  useEffect(() => () => stopSpeaking(), []);
+
   const clearSetState = useCallback(() => {
     goodCountRef.current = 0;
+    voicePolicyRef.current.reset();
     logRef.current = [];
     cueRef.current = null;
     noticeRef.current = null;
@@ -227,15 +245,19 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
       // Reps and cues only count during the live phase; setup/countdown only check position.
       if (live) {
-        if (out.liveCue) {
+        if (out.liveCue && !out.completedRep) {
           cueRef.current = { code: out.liveCue, atMs: now };
           noticeRef.current = { text: CUE_TEXT[out.liveCue], tone: 'error', atMs: now };
+          if (!mutedRef.current) speak(voicePolicyRef.current.next({ kind: 'cue', code: out.liveCue, atMs: now }));
         }
         if (out.completedRep) {
           const r = out.completedRep;
           noticeRef.current = r.errors.length
             ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
             : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
+          if (!mutedRef.current) {
+            speak(voicePolicyRef.current.next({ kind: 'rep', index: r.index, errors: r.errors, atMs: now }));
+          }
           const good = isGoodRep(r.score, r.errors);
           if (good) goodCountRef.current += 1;
           logRef.current = [{ kind: 'rep' as const, rep: r, good }, ...logRef.current].slice(0, LOG_LIMIT);
@@ -370,6 +392,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
       setPhase('done'); // nothing to save (no user selected)
       return;
     }
+    stopSpeaking();
     setPhase('saving');
     setSaveError(null);
     try {
@@ -396,13 +419,14 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const [showDebug, setShowDebug] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() === 'd' && !e.metaKey && !e.ctrlKey && !e.altKey && !isTyping(e.target)) {
-        setShowDebug((v) => !v);
-      }
+      if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'd') setShowDebug((v) => !v);
+      if (key === 'm') toggleMute();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [toggleMute]);
 
   const goodReps = ui.goodReps;
   const inSet = phase === 'live' || phase === 'saving' || phase === 'done';
@@ -618,9 +642,22 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                 </div>
               </>
             )}
-            <p className={styles.hint}>
-              <kbd>D</kbd> debug &amp; tuning panel
-            </p>
+            <div className={styles.footer}>
+              {speechAvailable() && (
+                <button
+                  type="button"
+                  className={`btn btn-secondary ${styles.muteBtn}`}
+                  onClick={toggleMute}
+                  aria-pressed={muted}
+                  data-mute
+                >
+                  {muted ? '🔇 Voice off' : '🔊 Voice on'}
+                </button>
+              )}
+              <p className={styles.hint}>
+                <kbd>M</kbd> mute · <kbd>D</kbd> debug &amp; tuning
+              </p>
+            </div>
           </aside>
         </div>
       )}

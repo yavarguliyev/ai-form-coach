@@ -83,10 +83,75 @@ Tip: press **D** during a workout to open the debug panel (live angles and tunin
 | `Docker is not installed` / `not running` | Install Docker Desktop (step 1) and start it. Wait for it to say *running*, then run the script again. |
 | `A required port is busy` | Another program uses 5180, 8010, 55432 or 8090. Close it, or change the port in the `.env` file (created on first start) and run `bash infra/restart.sh`. |
 | "Camera access is blocked" | Click the camera icon in the address bar → **Allow**. On macOS also check **System Settings → Privacy & Security → Camera** for your browser. Close other apps using the camera (Zoom, Teams…). |
-| It doesn't count my reps | Make sure your whole body (or both arms for the press) is in view and well lit, 2–3 m from the camera. The message on the video tells you what it can't see. |
+| It doesn't count my reps | Read the message on the video — it says exactly what it can't see or what to do ("Turn sideways to the camera", "Step back — I can't see your knees"). Stand 2–3 m from the camera with your whole body (or both arms and your head for the press) in view. |
+| It loses track of me | Light your body from the front (a window or lamp behind you makes you a silhouette), wear clothes that contrast with the background, and keep other people out of the frame. |
+| Rep counted / not counted wrongly | Press **D** during a workout: the panel shows the live angle and has sliders to tune the thresholds for your body (changes are not saved). |
+| Windows: Docker is very slow or won't start | In Docker Desktop → Settings → General, enable **Use the WSL 2 based engine**, and give Docker at least 4 GB of memory (Settings → Resources). |
 | Windows: `bash: command not found` | Run the commands in **Git Bash**, not in Command Prompt or PowerShell. |
 | Linux: `permission denied` from Docker | Run `sudo usermod -aG docker $USER`, log out and in again. |
 | Anything else | `bash infra/restart.sh`. Still broken? `bash infra/remove.sh`, then `bash infra/start.sh` for a clean install (deletes saved workouts). |
+
+---
+
+## How it works
+
+```
+Browser (http://localhost:5180)
+  webcam → MediaPipe Pose (33 body points, runs locally) → engine:
+     smoothing → visibility check → joint angles → rep counter → form checks → score
+  → screen + voice feedback
+  → each counted rep is sent to the server
+                    │  HTTP / JSON
+                    ▼
+Server (FastAPI, :8010)  →  PostgreSQL database  ←  Adminer viewer (:8090)
+```
+
+- **Video never leaves the computer.** Only numbers are saved: per rep its score, mistakes,
+  angles and duration.
+- **A rep only counts if it is complete.** Each exercise follows one joint angle (knee for
+  squats, elbow for curls and presses). You must start in position, reach the target angle (e.g.
+  knee at 100° or lower), and come back. Half reps, wobbles, bounces and anything the camera
+  couldn't clearly see are not counted — and the app says why.
+- **Score:** 100 per rep, −30 for a form mistake (chest dropping, elbow swinging, uneven arms),
+  −15 for going too fast. A rep is "good" with a score of 70+ and no form mistake.
+- **Nothing is lost if the server hiccups:** reps are queued in the browser and re-sent until
+  saved.
+
+## Presentation script (5 minutes)
+
+**Before you present (10 minutes earlier)**
+
+1. `bash infra/start.sh`, then `bash infra/demo-data.sh` so History has three weeks of progress.
+2. Open three browser tabs: the app (http://localhost:5180), the API docs
+   (http://localhost:8010/docs), and Adminer (http://localhost:8090) — log in once
+   (System **PostgreSQL**, Server **db**, user / password / database **formcoach**).
+3. Check the light and camera: open **Squat**, stand 2–3 m away sideways and confirm the
+   checklist turns green. Press **D** and do two slow squats; if a normal squat already shows
+   "Keep your chest up", raise **Max torso lean** a little.
+4. Keep the sound on (voice cues are part of the demo) — or press **M** to mute.
+
+**The demo**
+
+| Time | Show | Say |
+| --- | --- | --- |
+| 0:00 | Terminal: `docker compose -p formcoach ps`, then the API docs tab | "Everything runs locally in four containers: the web app, an API, a PostgreSQL database and a database viewer. The camera video never leaves this laptop — pose detection runs in the browser." |
+| 0:45 | App → **Squat** → stand sideways | "It first checks that it can see my whole body and that I'm side-on, then counts down." |
+| 1:15 | Do 3 good squats, **1 half squat**, **1 squat leaning forward**, 1 good squat → **Finish set** | Point at the screen: the half squat says **"Not counted — Go lower"**, the leaning one is counted but flagged **"Keep your chest up"**, and you hear the rep numbers. |
+| 2:15 | Summary page | "Every rep gets a score; it tells me my most common mistake and how to fix it." |
+| 2:45 | Adminer → table **reps** → *Select data* (or the SQL below) | "Each rep was saved the moment I finished it — with its score, angles and the mistake code." |
+| 3:30 | App → **Bicep Curl** → curl while **swinging the elbow forward** | It flags **"Keep your elbow pinned to your side"**. |
+| 4:15 | **History** | "Over three weeks the average score went up and 'chest dropping forward' is the mistake to work on." |
+
+SQL to paste in Adminer (*SQL command*) to show the latest reps:
+
+```sql
+SELECT e.name AS exercise, r.rep_index, r.score, r.errors, r.min_angle, r.max_angle, r.duration_ms
+FROM reps r
+JOIN sessions s ON s.id = r.session_id
+JOIN exercises e ON e.id = s.exercise_id
+ORDER BY s.started_at DESC, r.rep_index
+LIMIT 20;
+```
 
 ---
 
@@ -162,7 +227,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [x] T-29 History page — exercise tabs, stat tiles, score line + reps-per-set charts (Recharts), sets table, top mistakes
 - [x] T-30 Visual polish — fits the screen while exercising, one friendly "server unreachable" notice that recovers by itself, 404 page, page titles, favicon
 - [x] T-31 Demo data — `make demo-data` / `bash infra/demo-data.sh` (tagged example sets; real ones untouched)
-- [ ] T-32 README & presentation script
+- [x] T-32 README & presentation script — install guide, how it works, troubleshooting, 5-minute demo script
 - [ ] T-33 Final verification from a fresh clone
 
 ### Stretch

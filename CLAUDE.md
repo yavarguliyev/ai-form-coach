@@ -627,7 +627,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 ### Milestone 3 — Engine core (most important — test heavily)
 
 - [x] **T-14 Geometry + pixel conversion** (§8.2, §8.3) with tests.
-- [ ] **T-15 Smoothing + visibility gate + side selection** (§8.4, §8.5) with tests.
+- [x] **T-15 Smoothing + visibility gate + side selection** (§8.4, §8.5) with tests.
 - [ ] **T-16 Generic rep state machine** (§8.6) supporting both directions, min/max rep time, partial-rep rejection, with tests.
 - [ ] **T-17 Scoring** (§8.8) with tests.
 - [ ] **T-18 Synthetic data generator** — test utility producing landmark sequences for given angle curves, frame rate, noise, and visibility drops.

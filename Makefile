@@ -17,7 +17,7 @@ ADMINER_PORT  ?= 8090
 
 COMPOSE := docker compose -p formcoach
 
-.PHONY: help check-ports check-codes up down logs test seed reset ps
+.PHONY: help check-ports check-codes up down logs test seed demo-data demo-data-remove reset ps
 
 help:
 	@echo "make check-ports  verify $(FRONTEND_PORT), $(BACKEND_PORT), $(DB_HOST_PORT), $(ADMINER_PORT) are free"
@@ -27,6 +27,8 @@ help:
 	@echo "make ps           list this project's containers"
 	@echo "make test         check-codes, then backend pytest + frontend vitest inside containers"
 	@echo "make seed         re-run the idempotent seed"
+	@echo "make demo-data    (re)create 3 weeks of example sets for Demo User (real sets untouched)"
+	@echo "make demo-data-remove  delete only the example sets"
 	@echo "make reset        wipe ONLY this project's DB volume, then up"
 
 # Fails if any of our 4 host ports is taken by something other than this stack.
@@ -81,6 +83,13 @@ check-codes:
 
 seed:
 	$(COMPOSE) exec -T backend python -m app.seed
+
+# Example history for the presentation. Re-running replaces only the demo sets.
+demo-data:
+	$(COMPOSE) exec -T backend python -m app.demo_data
+
+demo-data-remove:
+	$(COMPOSE) exec -T backend python -m app.demo_data --remove
 
 # down -v removes only volumes declared by this compose project (fc_pgdata).
 reset:

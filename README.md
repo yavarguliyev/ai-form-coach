@@ -52,6 +52,8 @@ Run these from the project folder:
 | Start the app | `bash infra/start.sh` | kept |
 | Restart it (stuck, or after updating the code) | `bash infra/restart.sh` | kept |
 | Remove it completely (containers, images, data) | `bash infra/remove.sh` | **deleted** (asks first) |
+| Add 3 weeks of example workouts (for a demo) | `bash infra/demo-data.sh` | kept — only examples are added/replaced |
+| Delete the example workouts | `bash infra/demo-data.sh --remove` | kept |
 
 `remove.sh` only removes FormCoach's own Docker containers, network, volume and images. It never
 touches other Docker projects, and it keeps a base image (like `postgres`) if another project uses it.
@@ -99,6 +101,7 @@ make logs        # follow logs
 make down        # stop (data kept)
 make reset       # wipe this project's database volume and start again
 make seed        # re-run the idempotent seed
+make demo-data   # 3 weeks of example sets for Demo User (re-run replaces only those)
 ```
 
 Ports and passwords are configured in `.env` (created from `.env.example`). Host DB access:
@@ -158,7 +161,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 
 - [x] T-29 History page — exercise tabs, stat tiles, score line + reps-per-set charts (Recharts), sets table, top mistakes
 - [ ] T-30 Visual polish
-- [ ] T-31 Demo data script (`make demo-data`)
+- [x] T-31 Demo data — `make demo-data` / `bash infra/demo-data.sh` (tagged example sets; real ones untouched)
 - [ ] T-32 README & presentation script
 - [ ] T-33 Final verification from a fresh clone
 
@@ -169,6 +172,6 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [ ] S-03 Fourth exercise
 - [ ] S-04 Export session as PDF/CSV
 
-**Tests:** `make test` — 59 backend + 213 frontend (engine, sync, voice) tests, plus the error-code check.
+**Tests:** `make test` — 64 backend + 213 frontend (engine, sync, voice) tests, plus the error-code check.
 
 **Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

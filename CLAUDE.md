@@ -604,7 +604,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 - [x] **T-05 Models + Alembic migration** — tables from §6.
       _AC:_ migration runs automatically on backend start; tables visible in Adminer.
-- [ ] **T-06 Seed** — 3 exercises + `Demo User`, idempotent.
+- [x] **T-06 Seed** — 3 exercises + `Demo User`, idempotent.
       _AC:_ restarting the backend doesn't duplicate rows.
 - [ ] **T-07 Users & exercises endpoints** — per §7.
 - [ ] **T-08 Sessions & reps endpoints** — create, add rep, finish (server-side aggregates), list, get, delete.

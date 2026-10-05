@@ -49,6 +49,8 @@ export function usePoseLandmarker(
   videoRef: RefObject<HTMLVideoElement | null>,
   enabled: boolean,
   onFrame: (frame: PoseFrame) => void,
+  /** Set false to skip loading the model entirely (dev replay mode). */
+  load = true,
 ) {
   const [model, setModel] = useState<PoseModelState>({ status: 'loading' });
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
@@ -58,6 +60,7 @@ export function usePoseLandmarker(
 
   // Load once.
   useEffect(() => {
+    if (!load) return;
     let cancelled = false;
     (async () => {
       const forced = forcedDelegate();
@@ -86,7 +89,7 @@ export function usePoseLandmarker(
       landmarkerRef.current?.close();
       landmarkerRef.current = null;
     };
-  }, []);
+  }, [load]);
 
   // Detection loop: one detection per NEW camera frame.
   // requestVideoFrameCallback fires exactly once per presented frame. The fallback is a

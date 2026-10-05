@@ -40,12 +40,13 @@ function classify(err: unknown): CameraErrorKind {
  * Opens the webcam and plays it into the returned video ref.
  * Stops all tracks on unmount. `retry()` re-requests after an error.
  */
-export function useCamera() {
+export function useCamera(enabled = true) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<CameraState>({ status: 'requesting' });
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setState({ status: 'error', kind: 'insecure', detail: 'navigator.mediaDevices is unavailable' });
       return;
@@ -92,7 +93,7 @@ export function useCamera() {
       stream?.getTracks().forEach((t) => t.stop());
       if (videoRef.current) videoRef.current.srcObject = null;
     };
-  }, [attempt]);
+  }, [attempt, enabled]);
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 

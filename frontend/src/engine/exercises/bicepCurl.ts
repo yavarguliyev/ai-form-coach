@@ -83,6 +83,7 @@ export const bicepCurl: ExerciseDefinition = {
 
   reversalCue: (peakAngle, limits) => (peakAngle < limits[NO_EXT] ? 'CURL_NO_EXTENSION' : null),
 
+  primaryAngleLabel: 'Elbow angle',
   startHint: 'Straighten your arm down by your side to start',
 
   setupInstructions:

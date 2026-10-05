@@ -78,6 +78,7 @@ export const squat: ExerciseDefinition = {
 
   partialCue: 'SQUAT_SHALLOW',
 
+  primaryAngleLabel: 'Knee angle',
   startHint: 'Stand up straight to start',
 
   setupInstructions:

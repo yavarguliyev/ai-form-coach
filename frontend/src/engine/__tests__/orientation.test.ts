@@ -76,6 +76,7 @@ describe('start-position hints in the analyzer', () => {
     expect(r.completed).toHaveLength(0);
     expect(r.outputs.some((o) => o.state === 'TOP' || o.state === 'IN_REP')).toBe(false);
     expect(r.outputs[20].positionHint).toBe('Turn sideways to the camera');
+    expect(r.outputs[20]).toMatchObject({ orientationOk: false, orientationHint: 'Turn sideways to the camera' });
   });
 
   it('squat starting crouched: "Stand up straight to start" until standing, then counts', () => {

@@ -100,6 +100,7 @@ export const shoulderPress: ExerciseDefinition = {
 
   partialCue: 'PRESS_PARTIAL',
 
+  primaryAngleLabel: 'Elbow angle (both arms)',
   startHint: 'Bring your hands down to your shoulders to start',
 
   setupInstructions:

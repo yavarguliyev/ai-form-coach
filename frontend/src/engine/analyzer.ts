@@ -62,6 +62,10 @@ export interface AnalyzerOutput {
   positionHint: string | null;
   /** READY only: fraction 0..1 of the start-position hold completed. */
   holdProgress: number;
+  /** Turned the right way for the camera view (true when it can't be judged). */
+  orientationOk: boolean;
+  /** "Turn sideways to the camera" / "Face the camera" when orientationOk is false. */
+  orientationHint: string | null;
   /** Measured orientation ratio (debug), null when not measurable. */
   orientationRatio: number | null;
   /** Present only on the frame a rep is counted. */
@@ -230,6 +234,8 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
         liveCue,
         positionHint,
         holdProgress: out.holdProgress,
+        orientationOk: startAllowed,
+        orientationHint: orientation?.hint ?? null,
         orientationRatio: orientation?.ratio ?? null,
         ...(completedRep && { completedRep }),
         ...(rejectedRep && { rejectedRep }),

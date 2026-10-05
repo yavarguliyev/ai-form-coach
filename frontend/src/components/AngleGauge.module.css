@@ -1,0 +1,66 @@
+.gauge {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.gauge svg {
+  width: 100%;
+  max-width: 240px;
+}
+
+.track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 10;
+  stroke-linecap: round;
+}
+
+.range {
+  fill: none;
+  stroke: rgba(61, 220, 151, 0.35);
+  stroke-width: 10;
+}
+
+.startMark,
+.endMark {
+  stroke-width: 3;
+}
+
+.startMark {
+  stroke: var(--text-muted);
+}
+
+.endMark {
+  stroke: var(--accent);
+}
+
+.needle {
+  stroke: var(--text);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transition: all 0.2s linear;
+}
+
+.hub {
+  fill: var(--text);
+}
+
+.gauge figcaption {
+  display: flex;
+  flex-direction: column;
+}
+
+.value {
+  font-size: 40px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--text-muted);
+}

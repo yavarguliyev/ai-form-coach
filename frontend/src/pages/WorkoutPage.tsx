@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router';
+import { Link, useParams } from 'react-router';
+import { AngleGauge } from '../components/AngleGauge';
 import { CameraError } from '../components/CameraError';
 import { DebugPanel, type DebugInfo, type Tuning } from '../components/DebugPanel';
 import { drawSkeleton } from '../components/skeleton';
 import { VideoCanvas } from '../components/VideoCanvas';
-import { createAnalyzer, type Analyzer, type AnalyzerOutput } from '../engine/analyzer';
+import { createAnalyzer, type Analyzer, type AnalyzerOutput, type CompletedRep } from '../engine/analyzer';
 import { CUE_TEXT, type ErrorCode } from '../engine/errorCodes';
 import { getExercise } from '../engine/exercises';
 import { defaultLimits, type ExerciseDefinition } from '../engine/exercises/types';
@@ -17,9 +18,15 @@ import styles from './WorkoutPage.module.css';
 const UI_REFRESH_MS = 250; // per-frame data reaches React at 4 Hz, never per frame (§14)
 const CUE_VISIBLE_MS = 2500; // §8.9
 const LOG_LIMIT = 12;
+/** Setup checks must pass continuously this long before the countdown starts by itself. */
+const AUTO_START_AFTER_MS = 1000;
+const COUNTDOWN_FROM = 3;
+
+type Phase = 'setup' | 'countdown' | 'live' | 'done';
+type Tone = 'info' | 'ok' | 'warn' | 'error';
 
 type LogEntry =
-  | { kind: 'rep'; index: number; score: number; errors: string[]; minAngle: number; maxAngle: number; durationMs: number; good: boolean }
+  | { kind: 'rep'; rep: CompletedRep; good: boolean }
   | { kind: 'rejected'; reason: RejectReason; cue: ErrorCode | null };
 
 const REJECT_TEXT: Record<RejectReason, string> = {
@@ -28,8 +35,6 @@ const REJECT_TEXT: Record<RejectReason, string> = {
   too_long: 'not counted — took longer than 8 s',
   lost_tracking: 'not counted — lost sight of you mid-rep',
 };
-
-type Tone = 'info' | 'ok' | 'warn' | 'error';
 
 /** What the user is told after a rep that did NOT count. Small partial wobbles stay silent. */
 function rejectionNotice(reason: RejectReason, cue: ErrorCode | null): string | null {
@@ -73,7 +78,6 @@ function isTyping(target: EventTarget | null): boolean {
   );
 }
 
-// Live engine on the camera feed. The full workout flow (setup, countdown, saving) is T-25/T-26.
 export default function WorkoutPage() {
   const { exerciseSlug = '' } = useParams();
   const definition = getExercise(exerciseSlug);
@@ -82,15 +86,23 @@ export default function WorkoutPage() {
       <section>
         <h1>Unknown exercise</h1>
         <p>“{exerciseSlug}” is not one of the supported exercises.</p>
+        <Link to="/">Back to exercises</Link>
       </section>
     );
   }
   return <Workout key={definition.slug} definition={definition} />;
 }
 
+/** DEV only: ?replay=<scenario> feeds synthetic frames instead of the camera (src/dev/replay.ts). */
+const REPLAY = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('replay') : null;
+
 function Workout({ definition }: { definition: ExerciseDefinition }) {
-  const { videoRef, state: camera, retry } = useCamera();
+  const { videoRef, state: realCamera, retry } = useCamera(!REPLAY);
+  const camera = REPLAY ? ({ status: 'ready', width: 1280, height: 720 } as const) : realCamera;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [phase, setPhase] = useState<Phase>('setup');
+  const phaseRef = useRef<Phase>('setup');
+  phaseRef.current = phase;
 
   // --- tuning → analyzer -------------------------------------------------------
   const [tuning, setTuning] = useState<Tuning>(() => initialTuning(definition));
@@ -101,6 +113,12 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   // Latest event message (cue, counted rep, rejected rep), shown for CUE_VISIBLE_MS.
   const noticeRef = useRef<{ text: string; tone: Tone; atMs: number } | null>(null);
 
+  const clearSetState = useCallback(() => {
+    logRef.current = [];
+    cueRef.current = null;
+    noticeRef.current = null;
+  }, []);
+
   useEffect(() => {
     try {
       validateThresholds(tuning.thresholds);
@@ -110,10 +128,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     }
     setTuningError(null);
     analyzerRef.current = createAnalyzer(definition, tuning);
-    logRef.current = [];
-    cueRef.current = null;
-    noticeRef.current = null;
-  }, [definition, tuning]);
+    clearSetState();
+  }, [definition, tuning, clearSetState]);
 
   // --- per-frame processing (refs only) -----------------------------------------
   const lastFrameRef = useRef<PoseFrame | null>(null);
@@ -124,46 +140,35 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     (frame: PoseFrame) => {
       lastFrameRef.current = frame;
       framesRef.current += 1;
-      const out = analyzerRef.current.processFrame(
-        frame.landmarks,
-        frame.videoWidth,
-        frame.videoHeight,
-        frame.timestampMs,
-      );
+      const out = analyzerRef.current.processFrame(frame.landmarks, frame.videoWidth, frame.videoHeight, frame.timestampMs);
       lastOutRef.current = out;
-
+      const live = phaseRef.current === 'live';
       const now = frame.timestampMs;
-      if (out.liveCue) {
-        cueRef.current = { code: out.liveCue, atMs: now };
-        noticeRef.current = { text: CUE_TEXT[out.liveCue], tone: 'error', atMs: now };
-      }
-      if (out.completedRep) {
-        const r = out.completedRep;
-        noticeRef.current = r.errors.length
-          ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
-          : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
-        logRef.current = [
-          { kind: 'rep' as const, index: r.index, score: r.score, errors: r.errors, minAngle: r.minAngle, maxAngle: r.maxAngle, durationMs: r.durationMs, good: isGoodRep(r.score, r.errors) },
-          ...logRef.current,
-        ].slice(0, LOG_LIMIT);
-      }
-      if (out.rejectedRep) {
-        const text = rejectionNotice(out.rejectedRep.reason, out.rejectedRep.cue);
-        if (text) noticeRef.current = { text, tone: 'error', atMs: now };
-        logRef.current = [
-          { kind: 'rejected' as const, reason: out.rejectedRep.reason, cue: out.rejectedRep.cue },
-          ...logRef.current,
-        ].slice(0, LOG_LIMIT);
+
+      // Reps and cues only count during the live phase; setup/countdown only check position.
+      if (live) {
+        if (out.liveCue) {
+          cueRef.current = { code: out.liveCue, atMs: now };
+          noticeRef.current = { text: CUE_TEXT[out.liveCue], tone: 'error', atMs: now };
+        }
+        if (out.completedRep) {
+          const r = out.completedRep;
+          noticeRef.current = r.errors.length
+            ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
+            : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
+          logRef.current = [{ kind: 'rep' as const, rep: r, good: isGoodRep(r.score, r.errors) }, ...logRef.current].slice(0, LOG_LIMIT);
+        }
+        if (out.rejectedRep) {
+          const text = rejectionNotice(out.rejectedRep.reason, out.rejectedRep.cue);
+          if (text) noticeRef.current = { text, tone: 'error', atMs: now };
+          logRef.current = [{ kind: 'rejected' as const, reason: out.rejectedRep.reason, cue: out.rejectedRep.cue }, ...logRef.current].slice(0, LOG_LIMIT);
+        }
       }
 
-      const cueActive = cueRef.current !== null && frame.timestampMs - cueRef.current.atMs < CUE_VISIBLE_MS;
+      const cueActive = live && cueRef.current !== null && now - cueRef.current.atMs < CUE_VISIBLE_MS;
       const ctx = canvasRef.current?.getContext('2d');
-      if (ctx) {
-        drawSkeleton(ctx, frame.landmarks, {
-          activeJoints: new Set(definition.requiredLandmarks(out.side)),
-          cueActive,
-        });
-      }
+      if (ctx) drawSkeleton(ctx, frame.landmarks, { activeJoints: new Set(definition.requiredLandmarks(out.side)), cueActive });
+
       if (import.meta.env.DEV) {
         // Lets automated browser checks read the latest frame and engine output. Dev only.
         const w = window as unknown as { __formcoachLastFrame?: PoseFrame; __formcoachLastOut?: AnalyzerOutput };
@@ -174,7 +179,26 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     [definition],
   );
 
-  const { model, fpsRef } = usePoseLandmarker(videoRef, camera.status === 'ready', onFrame);
+  const { model: realModel, fpsRef } = usePoseLandmarker(
+    videoRef,
+    !REPLAY && camera.status === 'ready' && phase !== 'done',
+    onFrame,
+    !REPLAY,
+  );
+  const model = REPLAY ? ({ status: 'ready', delegate: 'GPU' } as const) : realModel;
+
+  useEffect(() => {
+    if (!REPLAY || phase === 'done') return;
+    let handle: { stop(): void } | null = null;
+    let cancelled = false;
+    void import('../dev/replay').then(({ startReplay }) => {
+      if (!cancelled) handle = startReplay(REPLAY, onFrame);
+    });
+    return () => {
+      cancelled = true;
+      handle?.stop();
+    };
+  }, [phase, onFrame]);
 
   // --- UI snapshot at 4 Hz ---------------------------------------------------------
   const [ui, setUi] = useState<{
@@ -183,6 +207,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     log: LogEntry[];
     debug: DebugInfo | null;
   }>({ out: null, notice: null, log: [], debug: null });
+
   useEffect(() => {
     if (model.status !== 'ready') return;
     const id = setInterval(() => {
@@ -207,6 +232,53 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     return () => clearInterval(id);
   }, [model, fpsRef]);
 
+  // --- setup checks → auto countdown → live -----------------------------------------
+  const checks = {
+    camera: camera.status === 'ready',
+    model: model.status === 'ready',
+    visible: ui.out?.visibilityOk ?? false,
+    orientation: (ui.out?.visibilityOk ?? false) && (ui.out?.orientationOk ?? false),
+  };
+  const setupReady = checks.camera && checks.model && checks.visible && checks.orientation;
+
+  const readySinceRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (phase !== 'setup') return;
+    if (!setupReady) {
+      readySinceRef.current = null;
+      return;
+    }
+    readySinceRef.current ??= performance.now();
+    if (performance.now() - readySinceRef.current >= AUTO_START_AFTER_MS) setPhase('countdown');
+  }, [phase, setupReady, ui]);
+
+  const [count, setCount] = useState(COUNTDOWN_FROM);
+  useEffect(() => {
+    if (phase !== 'countdown') return;
+    setCount(COUNTDOWN_FROM);
+    let n = COUNTDOWN_FROM;
+    const id = setInterval(() => {
+      n -= 1;
+      if (n > 0) {
+        setCount(n);
+      } else {
+        clearInterval(id);
+        // Fresh set: counting starts now (the user must hold the start position again).
+        analyzerRef.current.reset();
+        clearSetState();
+        setPhase('live');
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [phase, clearSetState]);
+
+  // Walking out of view during the countdown cancels it.
+  useEffect(() => {
+    if (phase === 'countdown' && ui.out && (!ui.out.visibilityOk || !ui.out.orientationOk)) setPhase('setup');
+  }, [phase, ui.out]);
+
+  const finish = () => setPhase('done');
+
   // --- debug panel toggle ---------------------------------------------------------
   const [showDebug, setShowDebug] = useState(false);
   useEffect(() => {
@@ -219,89 +291,167 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const resetCounter = () => {
-    analyzerRef.current.reset();
-    logRef.current = [];
-    cueRef.current = null;
-    noticeRef.current = null;
-  };
-
+  const reps = useMemo(() => ui.log.flatMap((e) => (e.kind === 'rep' ? [e] : [])), [ui.log]);
+  const goodReps = reps.filter((e) => e.good).length;
+  const repCount = phase === 'live' || phase === 'done' ? (ui.out?.repCount ?? 0) : 0;
+  const width = camera.status === 'ready' ? camera.width : 1280;
+  const height = camera.status === 'ready' ? camera.height : 720;
   const banner = ui.notice ?? statusBanner(ui.out);
   const showHold = !ui.notice && ui.out?.state === 'READY' && ui.out.visibilityOk && !ui.out.positionHint;
 
-  const goodReps = useMemo(() => ui.log.filter((e) => e.kind === 'rep' && e.good).length, [ui.log]);
-  const width = camera.status === 'ready' ? camera.width : 1280;
-  const height = camera.status === 'ready' ? camera.height : 720;
-
   return (
-    <section className={styles.page}>
+    <section className={styles.page} data-phase={phase}>
       <header className={styles.top}>
         <div>
           <h1>{definition.name}</h1>
           <p className={styles.instructions}>{definition.setupInstructions}</p>
         </div>
-        <div className={styles.counters}>
-          <div className={styles.counter}>
-            <span className={styles.counterValue} data-rep-count>
-              {ui.out?.repCount ?? 0}
-            </span>
-            <span className={styles.counterLabel}>reps</span>
+        {(phase === 'live' || phase === 'done') && (
+          <div className={styles.counters}>
+            <div className={styles.counter}>
+              <span className={styles.counterValue} data-rep-count>
+                {repCount}
+              </span>
+              <span className={styles.counterLabel}>reps</span>
+            </div>
+            <div className={styles.counter}>
+              <span className={`${styles.counterValue} ${styles.good}`} data-good-count>
+                {goodReps}
+              </span>
+              <span className={styles.counterLabel}>good</span>
+            </div>
           </div>
-          <div className={styles.counter}>
-            <span className={`${styles.counterValue} ${styles.good}`}>{goodReps}</span>
-            <span className={styles.counterLabel}>good</span>
-          </div>
-        </div>
+        )}
       </header>
 
       {camera.status === 'error' && <CameraError kind={camera.kind} detail={camera.detail} onRetry={retry} />}
-      {camera.status === 'requesting' && <p>Waiting for camera permission…</p>}
 
       <div className={styles.main}>
         <div className={styles.videoCol}>
-          <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} hidden={camera.status === 'error'} />
-          <div className={`${styles.banner} ${styles[banner.tone]}`} data-banner data-tone={banner.tone} role="status">
-            {banner.text}
-            {showHold && (
-              <span className={styles.holdTrack} aria-hidden>
-                <span className={styles.holdFill} style={{ width: `${(ui.out?.holdProgress ?? 0) * 100}%` }} />
-              </span>
+          <div className={styles.stageWrap}>
+            <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} hidden={camera.status === 'error'} />
+            {phase === 'countdown' && (
+              <div className={styles.countdown} data-countdown aria-live="assertive">
+                {count}
+              </div>
             )}
           </div>
-          <p className={styles.meta} data-pose-status={model.status}>
-            {model.status === 'loading' && 'Loading pose model…'}
-            {model.status === 'error' && `Pose detection unavailable: ${model.detail}`}
-            {model.status === 'ready' && 'Press D for the debug and tuning panel'}
-          </p>
+
+          {phase === 'live' && (
+            <div className={`${styles.banner} ${styles[banner.tone]}`} data-banner data-tone={banner.tone} role="status">
+              {banner.text}
+              {showHold && (
+                <span className={styles.holdTrack} aria-hidden>
+                  <span className={styles.holdFill} style={{ width: `${(ui.out?.holdProgress ?? 0) * 100}%` }} />
+                </span>
+              )}
+            </div>
+          )}
+          {phase !== 'live' && model.status === 'error' && (
+            <p className={styles.errorText}>Pose detection unavailable: {model.detail}</p>
+          )}
         </div>
 
-        <aside className={styles.log} aria-label="Rep log">
-          <div className={styles.logHeader}>
-            <h2>Rep log</h2>
-            <button type="button" onClick={resetCounter}>
-              Reset
-            </button>
-          </div>
-          {ui.log.length === 0 && <p className={styles.muted}>Completed and rejected reps appear here.</p>}
-          <ol className={styles.logList} data-rep-log>
-            {ui.log.map((e, i) =>
-              e.kind === 'rep' ? (
-                <li key={i} className={e.good ? styles.logGood : styles.logBad}>
-                  <strong>#{e.index}</strong> score {e.score}
-                  {e.errors.length > 0 && ` · ${e.errors.map((c) => CUE_TEXT[c as ErrorCode]).join(', ')}`}
-                  <span className={styles.muted}>
-                    {' '}
-                    · {e.minAngle.toFixed(0)}–{e.maxAngle.toFixed(0)}° · {(e.durationMs / 1000).toFixed(1)} s
-                  </span>
-                </li>
-              ) : (
-                <li key={i} className={styles.logRejected}>
-                  {REJECT_TEXT[e.reason]}
-                  {e.cue && ` · “${CUE_TEXT[e.cue]}”`}
-                </li>
-              ),
-            )}
-          </ol>
+        <aside className={styles.side}>
+          {phase === 'setup' && (
+            <div className={styles.card} data-setup>
+              <h2>Get into position</h2>
+              <ul className={styles.checklist}>
+                <Check ok={checks.camera} label={camera.status === 'requesting' ? 'Waiting for camera permission…' : 'Camera on'} />
+                <Check ok={checks.model} label={model.status === 'loading' ? 'Loading pose model…' : 'Pose model ready'} />
+                <Check
+                  ok={checks.visible}
+                  label={checks.visible ? 'Body visible' : (ui.out?.visibilityMessage ?? 'Step into the camera view')}
+                />
+                <Check
+                  ok={checks.orientation}
+                  label={
+                    checks.orientation
+                      ? definition.cameraView === 'side'
+                        ? 'Standing sideways'
+                        : 'Facing the camera'
+                      : (ui.out?.orientationHint ?? (definition.cameraView === 'side' ? 'Turn sideways to the camera' : 'Face the camera'))
+                  }
+                />
+              </ul>
+              <p className={setupReady ? styles.readyText : styles.muted} data-setup-status>
+                {setupReady ? 'Ready — starting…' : 'The countdown starts by itself once everything is green.'}
+              </p>
+              <button type="button" className={styles.primary} disabled={!setupReady} onClick={() => setPhase('countdown')}>
+                Start now
+              </button>
+            </div>
+          )}
+
+          {phase === 'countdown' && (
+            <div className={styles.card}>
+              <h2>Get ready</h2>
+              <p className={styles.muted}>{definition.startHint}.</p>
+            </div>
+          )}
+
+          {(phase === 'live' || phase === 'done') && (
+            <>
+              <AngleGauge
+                angle={ui.out?.primaryAngle ?? null}
+                startThreshold={analyzerRef.current.thresholds.startThreshold}
+                endThreshold={analyzerRef.current.thresholds.endThreshold}
+                label={definition.primaryAngleLabel}
+              />
+              {phase === 'live' && (
+                <button type="button" className={`${styles.primary} ${styles.finish}`} onClick={finish} data-finish>
+                  Finish set
+                </button>
+              )}
+              {phase === 'done' && (
+                <div className={styles.card} data-done>
+                  <h2>Set finished</h2>
+                  <p>
+                    {repCount} reps · {goodReps} good
+                  </p>
+                  <div className={styles.row}>
+                    <button
+                      type="button"
+                      className={styles.primary}
+                      onClick={() => {
+                        clearSetState();
+                        setPhase('setup');
+                      }}
+                    >
+                      New set
+                    </button>
+                    <Link className={styles.secondary} to="/">
+                      Done
+                    </Link>
+                  </div>
+                </div>
+              )}
+              <div className={styles.card} aria-label="Rep log">
+                <h2>Rep log</h2>
+                {ui.log.length === 0 && <p className={styles.muted}>Counted and rejected reps appear here.</p>}
+                <ol className={styles.logList} data-rep-log>
+                  {ui.log.map((e, i) =>
+                    e.kind === 'rep' ? (
+                      <li key={i} className={e.good ? styles.logGood : styles.logBad}>
+                        <strong>#{e.rep.index}</strong> score {e.rep.score}
+                        {e.rep.errors.length > 0 && ` · ${e.rep.errors.map((c) => CUE_TEXT[c]).join(', ')}`}
+                        <span className={styles.muted}>
+                          {' '}
+                          · {e.rep.minAngle.toFixed(0)}–{e.rep.maxAngle.toFixed(0)}° · {(e.rep.durationMs / 1000).toFixed(1)} s
+                        </span>
+                      </li>
+                    ) : (
+                      <li key={i} className={styles.logRejected}>
+                        {REJECT_TEXT[e.reason]}
+                        {e.cue && ` · “${CUE_TEXT[e.cue]}”`}
+                      </li>
+                    ),
+                  )}
+                </ol>
+              </div>
+            </>
+          )}
+          <p className={styles.muted}>Press D for the debug and tuning panel.</p>
         </aside>
       </div>
 
@@ -316,5 +466,16 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
         />
       )}
     </section>
+  );
+}
+
+function Check({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <li className={ok ? styles.checkOk : styles.checkPending} data-check={ok ? 'ok' : 'pending'}>
+      <span className={styles.checkIcon} aria-hidden>
+        {ok ? '✓' : '•'}
+      </span>
+      {label}
+    </li>
   );
 }

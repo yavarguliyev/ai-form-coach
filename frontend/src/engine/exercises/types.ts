@@ -67,6 +67,8 @@ export interface ExerciseDefinition {
    * (e.g. re-curling without extending). Return a cue code or null.
    */
   reversalCue?(peakAngle: number, limits: Limits): ErrorCode | null;
+  /** What the primary angle measures, for the UI gauge (e.g. "Knee angle"). */
+  primaryAngleLabel: string;
   /** Shown while waiting for the start position, e.g. "Stand up straight to start". */
   startHint: string;
   /** Shown on the setup screen. */

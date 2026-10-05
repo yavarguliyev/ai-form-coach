@@ -1,0 +1,29 @@
+.box {
+  max-width: 560px;
+  padding: 24px;
+  border: 1px solid var(--error);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.box h2 {
+  margin: 0 0 8px;
+}
+
+.box button {
+  margin-top: 8px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #0b0d10;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.detail {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

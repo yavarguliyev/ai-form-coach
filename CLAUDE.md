@@ -597,7 +597,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
       _AC:_ `make up` starts all 4 on ports 5180/8010/55432/8090 only; `docker ps` shows no other port used by `fc_*` containers; the existing `ddd_*` containers are untouched and still running; Adminer can log in to the DB.
 - [x] **T-03 Backend skeleton** — FastAPI app, config, DB session, CORS, `/api/health` checking DB.
       _AC:_ `GET /api/health` → `{status:"ok", db:"ok"}`; `/docs` loads.
-- [ ] **T-04 Frontend skeleton** — Vite + React + TS app with router and 4 empty pages, API client that calls `/api/health` and shows status in the header.
+- [x] **T-04 Frontend skeleton** — Vite + React + TS app with router and 4 empty pages, API client that calls `/api/health` and shows status in the header.
       _AC:_ `localhost:5180` shows "Backend: connected".
 
 ### Milestone 1 — Database & API

@@ -1,0 +1,18 @@
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.connected .dot { background: var(--ok); }
+.db-error .dot { background: var(--warn); }
+.offline .dot { background: var(--error); }

@@ -9,6 +9,7 @@ import type { ErrorCode, RepErrorCode } from './errorCodes';
 import { defaultLimits, type ExerciseDefinition, type FrameMetrics, type Limits, type Pose } from './exercises/types';
 import { toPixelLandmarks } from './geometry';
 import type { Landmark } from './landmarks';
+import { checkOrientation } from './orientation';
 import { createRepCounter, type RejectReason, type RepState, type RepThresholds } from './repCounter';
 import { scoreRep } from './scoring';
 import { createLandmarkSmoother } from './smoothing';
@@ -54,6 +55,15 @@ export interface AnalyzerOutput {
   /** Required landmarks that failed the gate this frame. */
   missingLandmarks: number[];
   liveCue: ErrorCode | null;
+  /**
+   * While waiting to start (READY, body visible): what the user must do, e.g. "Turn sideways
+   * to the camera" or "Stand up straight to start". Null once in position.
+   */
+  positionHint: string | null;
+  /** READY only: fraction 0..1 of the start-position hold completed. */
+  holdProgress: number;
+  /** Measured orientation ratio (debug), null when not measurable. */
+  orientationRatio: number | null;
   /** Present only on the frame a rep is counted. */
   completedRep?: CompletedRep;
   /** Present only on the frame a rep is rejected. */
@@ -143,8 +153,18 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
         endConditionOk = definition.endConditionOk?.(pose, side) ?? true;
       }
       const valid = vis.ok && Number.isFinite(angle);
+      // Orientation only gates the START of a set; it is never checked mid-rep.
+      const orientation = pose ? checkOrientation(pose, definition.cameraView) : null;
+      const startAllowed = orientation?.ok ?? true;
 
-      const out = counter.update({ angle, valid, trackingLost: lost, timestampMs, endConditionOk });
+      const out = counter.update({
+        angle,
+        valid,
+        trackingLost: lost,
+        timestampMs,
+        endConditionOk,
+        startAllowed,
+      });
 
       if (out.started) repMetrics = {};
       // Metrics only from valid frames of the rep in progress (never report errors from
@@ -192,6 +212,12 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
         repMetrics = {};
       }
 
+      let positionHint: string | null = null;
+      if (out.state === 'READY' && valid) {
+        if (!startAllowed) positionHint = orientation?.hint ?? null;
+        else if (!out.atStartPosition) positionHint = definition.startHint;
+      }
+
       return {
         state: out.state,
         repCount: out.repCount,
@@ -202,6 +228,9 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
         visibilityMessage: visibilityMessage(pose, vis.missing),
         missingLandmarks: vis.missing,
         liveCue,
+        positionHint,
+        holdProgress: out.holdProgress,
+        orientationRatio: orientation?.ratio ?? null,
         ...(completedRep && { completedRep }),
         ...(rejectedRep && { rejectedRep }),
       };

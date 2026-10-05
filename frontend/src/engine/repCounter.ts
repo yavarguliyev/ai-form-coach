@@ -48,6 +48,11 @@ export interface RepFrameInput {
   timestampMs: number;
   /** Extra exercise rule for reaching the end (e.g. wrists above nose). Default true. */
   endConditionOk?: boolean;
+  /**
+   * Whether the body is set up so a set may start (e.g. turned sideways for a side-view
+   * exercise). While false, READY never advances to TOP. Default true. Ignored mid-rep.
+   */
+  startAllowed?: boolean;
 }
 
 export interface CompletedRepTiming {
@@ -79,6 +84,10 @@ export interface RepFrameOutput {
   rejected?: RejectedRep;
   /** After reaching the end, the user turned back toward it before returning to start. */
   reversal?: { peakAngle: number };
+  /** READY only: the current angle is in the start position (and starting is allowed). */
+  atStartPosition: boolean;
+  /** READY only: fraction 0..1 of the start hold completed. */
+  holdProgress: number;
   /** Live info about the rep in progress (null outside IN_REP). */
   current: { startedAtMs: number; minAngle: number; maxAngle: number; endReached: boolean } | null;
 }
@@ -141,6 +150,8 @@ export function createRepCounter(config: RepCounterConfig): RepCounter {
     state,
     repCount,
     started: false,
+    atStartPosition: false,
+    holdProgress: 0,
     current: rep
       ? {
           startedAtMs: rep.startedAtMs,
@@ -174,17 +185,19 @@ export function createRepCounter(config: RepCounterConfig): RepCounter {
     return output({ rejected });
   };
 
-  const waitForStartHold = (angle: number, now: number): RepFrameOutput => {
-    if (!atStart(angle)) {
+  const waitForStartHold = (angle: number, now: number, startAllowed: boolean): RepFrameOutput => {
+    if (!startAllowed || !atStart(angle)) {
       holdSince = null;
-      return output();
+      return output({ atStartPosition: false, holdProgress: 0 });
     }
     holdSince ??= now;
-    if (now - holdSince >= startHoldMs) {
+    const held = now - holdSince;
+    if (held >= startHoldMs) {
       state = 'TOP';
       holdSince = null;
+      return output({ atStartPosition: true, holdProgress: 1 });
     }
-    return output();
+    return output({ atStartPosition: true, holdProgress: Math.min(1, held / startHoldMs) });
   };
 
   return {
@@ -202,7 +215,7 @@ export function createRepCounter(config: RepCounterConfig): RepCounter {
       rep = null;
     },
 
-    update({ angle, valid, trackingLost, timestampMs: now, endConditionOk = true }) {
+    update({ angle, valid, trackingLost, timestampMs: now, endConditionOk = true, startAllowed = true }) {
       // Lost tracking: discard any partial rep and wait for the body to be visible again.
       if (trackingLost) {
         if (state === 'IN_REP') return reject('lost_tracking', now, 'NOT_VISIBLE');
@@ -224,10 +237,10 @@ export function createRepCounter(config: RepCounterConfig): RepCounter {
           // Visible again: this valid frame already counts toward the start hold.
           state = 'READY';
           holdSince = null;
-          return waitForStartHold(angle, now);
+          return waitForStartHold(angle, now, startAllowed);
 
         case 'READY':
-          return waitForStartHold(angle, now);
+          return waitForStartHold(angle, now, startAllowed);
 
         case 'TOP':
           if (pastBy(angle, leaveTopThreshold) >= 0) {

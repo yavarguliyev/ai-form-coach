@@ -83,6 +83,8 @@ export const bicepCurl: ExerciseDefinition = {
 
   reversalCue: (peakAngle, limits) => (peakAngle < limits[NO_EXT] ? 'CURL_NO_EXTENSION' : null),
 
+  startHint: 'Straighten your arm down by your side to start',
+
   setupInstructions:
     'Stand sideways to the camera with your working arm closest to it. Keep your whole upper body and hips in frame.',
 };

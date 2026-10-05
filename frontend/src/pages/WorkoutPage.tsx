@@ -29,15 +29,36 @@ const REJECT_TEXT: Record<RejectReason, string> = {
   lost_tracking: 'not counted — lost sight of you mid-rep',
 };
 
-function statusText(out: AnalyzerOutput | null): string {
-  if (!out) return 'Starting…';
+type Tone = 'info' | 'ok' | 'warn' | 'error';
+
+/** What the user is told after a rep that did NOT count. Small partial wobbles stay silent. */
+function rejectionNotice(reason: RejectReason, cue: ErrorCode | null): string | null {
+  switch (reason) {
+    case 'partial':
+      return cue ? `Not counted — ${CUE_TEXT[cue]}` : null;
+    case 'too_short':
+      return 'Not counted — too fast, slow down';
+    case 'too_long':
+      return 'Not counted — that took too long';
+    case 'lost_tracking':
+      return 'Not counted — I lost sight of you';
+  }
+}
+
+/** Banner when no recent event is showing. */
+function statusBanner(out: AnalyzerOutput | null): { text: string; tone: Tone } {
+  if (!out) return { text: 'Starting…', tone: 'info' };
+  if (!out.visibilityOk) {
+    return { text: out.visibilityMessage ?? "I can't see you — step into the camera view", tone: 'warn' };
+  }
+  if (out.positionHint) return { text: out.positionHint, tone: 'warn' };
   const s: Record<RepState, string> = {
-    NOT_VISIBLE: out.visibilityMessage ?? "I can't see you — step into the camera view",
-    READY: out.visibilityOk ? 'Hold the start position…' : (out.visibilityMessage ?? ''),
+    NOT_VISIBLE: "I can't see you — step into the camera view",
+    READY: 'Hold still…',
     TOP: 'Ready — go!',
     IN_REP: 'Keep going',
   };
-  return s[out.state];
+  return { text: s[out.state], tone: out.state === 'TOP' ? 'ok' : 'info' };
 }
 
 function initialTuning(def: ExerciseDefinition): Tuning {
@@ -77,6 +98,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const analyzerRef = useRef<Analyzer>(createAnalyzer(definition));
   const logRef = useRef<LogEntry[]>([]);
   const cueRef = useRef<{ code: ErrorCode; atMs: number } | null>(null);
+  // Latest event message (cue, counted rep, rejected rep), shown for CUE_VISIBLE_MS.
+  const noticeRef = useRef<{ text: string; tone: Tone; atMs: number } | null>(null);
 
   useEffect(() => {
     try {
@@ -89,6 +112,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     analyzerRef.current = createAnalyzer(definition, tuning);
     logRef.current = [];
     cueRef.current = null;
+    noticeRef.current = null;
   }, [definition, tuning]);
 
   // --- per-frame processing (refs only) -----------------------------------------
@@ -108,15 +132,24 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
       );
       lastOutRef.current = out;
 
-      if (out.liveCue) cueRef.current = { code: out.liveCue, atMs: frame.timestampMs };
+      const now = frame.timestampMs;
+      if (out.liveCue) {
+        cueRef.current = { code: out.liveCue, atMs: now };
+        noticeRef.current = { text: CUE_TEXT[out.liveCue], tone: 'error', atMs: now };
+      }
       if (out.completedRep) {
         const r = out.completedRep;
+        noticeRef.current = r.errors.length
+          ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
+          : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
         logRef.current = [
           { kind: 'rep' as const, index: r.index, score: r.score, errors: r.errors, minAngle: r.minAngle, maxAngle: r.maxAngle, durationMs: r.durationMs, good: isGoodRep(r.score, r.errors) },
           ...logRef.current,
         ].slice(0, LOG_LIMIT);
       }
       if (out.rejectedRep) {
+        const text = rejectionNotice(out.rejectedRep.reason, out.rejectedRep.cue);
+        if (text) noticeRef.current = { text, tone: 'error', atMs: now };
         logRef.current = [
           { kind: 'rejected' as const, reason: out.rejectedRep.reason, cue: out.rejectedRep.cue },
           ...logRef.current,
@@ -144,21 +177,21 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const { model, fpsRef } = usePoseLandmarker(videoRef, camera.status === 'ready', onFrame);
 
   // --- UI snapshot at 4 Hz ---------------------------------------------------------
-  const [ui, setUi] = useState<{ out: AnalyzerOutput | null; cue: ErrorCode | null; log: LogEntry[]; debug: DebugInfo | null }>({
-    out: null,
-    cue: null,
-    log: [],
-    debug: null,
-  });
+  const [ui, setUi] = useState<{
+    out: AnalyzerOutput | null;
+    notice: { text: string; tone: Tone } | null;
+    log: LogEntry[];
+    debug: DebugInfo | null;
+  }>({ out: null, notice: null, log: [], debug: null });
   useEffect(() => {
     if (model.status !== 'ready') return;
     const id = setInterval(() => {
       const f = lastFrameRef.current;
-      const cue = cueRef.current;
+      const notice = noticeRef.current;
       const now = f?.timestampMs ?? 0;
       setUi({
         out: lastOutRef.current,
-        cue: cue && now - cue.atMs < CUE_VISIBLE_MS ? cue.code : null,
+        notice: notice && now - notice.atMs < CUE_VISIBLE_MS ? { text: notice.text, tone: notice.tone } : null,
         log: logRef.current,
         debug: {
           fps: fpsRef.current,
@@ -190,7 +223,11 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     analyzerRef.current.reset();
     logRef.current = [];
     cueRef.current = null;
+    noticeRef.current = null;
   };
+
+  const banner = ui.notice ?? statusBanner(ui.out);
+  const showHold = !ui.notice && ui.out?.state === 'READY' && ui.out.visibilityOk && !ui.out.positionHint;
 
   const goodReps = useMemo(() => ui.log.filter((e) => e.kind === 'rep' && e.good).length, [ui.log]);
   const width = camera.status === 'ready' ? camera.width : 1280;
@@ -223,12 +260,13 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
       <div className={styles.main}>
         <div className={styles.videoCol}>
           <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} hidden={camera.status === 'error'} />
-          <div
-            className={`${styles.banner} ${ui.cue ? styles.cueBanner : ui.out && !ui.out.visibilityOk ? styles.warnBanner : ''}`}
-            data-banner
-            role="status"
-          >
-            {ui.cue ? CUE_TEXT[ui.cue] : statusText(ui.out)}
+          <div className={`${styles.banner} ${styles[banner.tone]}`} data-banner data-tone={banner.tone} role="status">
+            {banner.text}
+            {showHold && (
+              <span className={styles.holdTrack} aria-hidden>
+                <span className={styles.holdFill} style={{ width: `${(ui.out?.holdProgress ?? 0) * 100}%` }} />
+              </span>
+            )}
           </div>
           <p className={styles.meta} data-pose-status={model.status}>
             {model.status === 'loading' && 'Loading pose model…'}

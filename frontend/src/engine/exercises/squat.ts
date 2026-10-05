@@ -78,6 +78,8 @@ export const squat: ExerciseDefinition = {
 
   partialCue: 'SQUAT_SHALLOW',
 
+  startHint: 'Stand up straight to start',
+
   setupInstructions:
     'Stand sideways to the camera, 2–3 m away, with your whole body in frame — head to feet.',
 };

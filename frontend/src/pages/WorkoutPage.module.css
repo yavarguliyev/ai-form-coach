@@ -68,14 +68,40 @@
   min-height: 64px;
 }
 
-.cueBanner {
-  border-color: var(--error);
-  color: var(--error);
+.ok {
+  border-color: var(--ok);
+  color: var(--ok);
 }
 
-.warnBanner {
+.warn {
   border-color: var(--warn);
   color: var(--warn);
+}
+
+.error {
+  border-color: var(--error);
+  color: var(--error);
+  background: rgba(242, 95, 92, 0.08);
+}
+
+.info {
+  color: var(--text);
+}
+
+.holdTrack {
+  display: block;
+  height: 6px;
+  margin-top: 10px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.holdFill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s linear;
 }
 
 .meta {

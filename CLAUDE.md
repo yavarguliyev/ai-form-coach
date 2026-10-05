@@ -350,6 +350,12 @@ visibility alone is not enough.
   counting pauses, the current partial rep is discarded, and the UI shows a specific instruction
   (e.g. "Step back — I can't see your knees").
 - Never count a rep or report a form error from invalid frames.
+- **Orientation gate (added after the first live test):** a set may only start when the user is
+  turned the right way — side view: shoulder width / torso length ≤ 0.45; front view: shoulder
+  width / nose-to-shoulder height ≥ 0.8 (`engine/orientation.ts`). Checked only before a rep,
+  never mid-rep. While waiting, the UI says exactly what to fix: "Turn sideways to the camera",
+  "Face the camera", or the exercise's start hint ("Stand up straight to start"), then shows a
+  hold-still progress bar.
 
 ### 8.6 Generic rep state machine (`repCounter.ts`)
 
@@ -467,6 +473,9 @@ are live cues only. The backend validates rep errors against this list.
 ### 8.9 Feedback & voice
 
 - Show the latest cue in a banner for 2.5 s.
+- Reps that do NOT count are announced in the banner, not only in the log: "Not counted — Go
+  lower", "Not counted — too fast, slow down", "Not counted — I lost sight of you". (Tiny partial
+  wobbles near the start stay silent.) Counted reps show "Rep N counted" or "Rep N — <mistake>".
 - Speak cues with `speechSynthesis`, with a cooldown of 3 s per cue code (don't nag).
 - Speak the rep number on each counted rep ("One", "Two"…). Toggleable mute button.
 - Positive feedback after a clean rep sometimes ("Great rep!") — at most once every 3 reps.

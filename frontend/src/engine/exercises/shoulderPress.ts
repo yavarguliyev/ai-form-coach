@@ -100,6 +100,8 @@ export const shoulderPress: ExerciseDefinition = {
 
   partialCue: 'PRESS_PARTIAL',
 
+  startHint: 'Bring your hands down to your shoulders to start',
+
   setupInstructions:
     'Face the camera with your head, both arms and upper body in frame. Start with your hands at shoulder height.',
 };

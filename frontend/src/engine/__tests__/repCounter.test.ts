@@ -348,3 +348,25 @@ describe('reset', () => {
     expect(counter.repCount).toBe(0);
   });
 });
+
+describe('start-position feedback', () => {
+  it('reports hold progress while the start position is held', () => {
+    const counter = createRepCounter(SQUAT);
+    const at = (t: number, angle: number, startAllowed = true) =>
+      counter.update({ angle, valid: true, trackingLost: false, timestampMs: t, startAllowed });
+    expect(at(0, 120)).toMatchObject({ state: 'READY', atStartPosition: false, holdProgress: 0 });
+    expect(at(100, 170)).toMatchObject({ atStartPosition: true, holdProgress: 0 });
+    expect(at(350, 170).holdProgress).toBeCloseTo(0.5, 9);
+    expect(at(600, 170)).toMatchObject({ state: 'TOP', holdProgress: 1 });
+  });
+
+  it('never starts while startAllowed is false, and restarts the hold once allowed', () => {
+    const counter = createRepCounter(SQUAT);
+    const at = (t: number, startAllowed: boolean) =>
+      counter.update({ angle: 170, valid: true, trackingLost: false, timestampMs: t, startAllowed });
+    for (let t = 0; t <= 2000; t += 33) expect(at(t, false).state).not.toBe('TOP');
+    expect(at(2033, true).holdProgress).toBe(0); // hold starts now, not at t=0
+    expect(at(2400, true).state).toBe('READY');
+    expect(at(2533, true).state).toBe('TOP');
+  });
+});

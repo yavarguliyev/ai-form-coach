@@ -35,5 +35,6 @@ export const testExercise: ExerciseDefinition = {
   evaluateRep: (rep, limits) => (rep.maxMetrics.torsoLean > limits.lean ? ['SQUAT_TORSO_LEAN'] : []),
   liveCue: (m, _state, limits) => (m.torsoLean > limits.lean ? 'SQUAT_TORSO_LEAN' : null),
   partialCue: 'SQUAT_SHALLOW',
+  startHint: 'Stand up straight to start',
   setupInstructions: 'test',
 };

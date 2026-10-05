@@ -638,7 +638,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 ### Milestone 4 — Exercises
 
-- [ ] **T-20 Squat definition** + tests from §8.11.
+- [x] **T-20 Squat definition** + tests from §8.11.
 - [ ] **T-21 Bicep curl definition** + tests.
 - [ ] **T-22 Shoulder press definition** + tests (including uneven press and wrists-above-nose rule).
 - [ ] **T-23 Live debug for tuning** — debug panel shows primary angle, metrics, state, and lets you adjust the active exercise's thresholds with sliders (in-memory only).

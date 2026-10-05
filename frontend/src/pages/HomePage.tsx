@@ -10,10 +10,17 @@ const BODY_PART_LABEL: Record<Exercise['body_part'], string> = {
   shoulders: 'Shoulders',
 };
 
+/** What the engine checks on every rep, shown on the cards (UI copy, see engine/exercises). */
+const CHECKS: Record<Exercise['slug'], string[]> = {
+  squat: ['Depth — knees to 100° or lower', 'Chest up — torso lean under 45°', 'Tempo — at least 1 s per rep'],
+  bicep_curl: ['Full curl — elbow to 50° or lower', 'Elbow pinned to your side', 'Full extension between reps'],
+  shoulder_press: ['Lockout — both hands above your head', 'Both arms pressing evenly', 'Tempo — at least 0.8 s per rep'],
+};
+
 /** Little figure seen from the side or the front, so the camera setup is clear at a glance. */
 function CameraViewIcon({ view }: { view: Exercise['camera_view'] }) {
   return (
-    <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden className={styles.viewIcon}>
+    <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden>
       <circle cx="24" cy="9" r="5" fill="currentColor" />
       {view === 'side' ? (
         <path d="M24 15 v16 M24 20 l7 6 M24 31 l-4 13 M24 31 l4 13" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" fill="none" />
@@ -24,7 +31,7 @@ function CameraViewIcon({ view }: { view: Exercise['camera_view'] }) {
   );
 }
 
-function UserPicker() {
+function UserCard() {
   const { users, user, loading, error, selectUser, createUser, reload } = useUser();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
@@ -54,7 +61,7 @@ function UserPicker() {
 
   if (error) {
     return (
-      <div className={styles.panel} role="alert">
+      <div className={styles.userCard} role="alert">
         <p className={styles.error}>Couldn't load users: {error}</p>
         <button type="button" className="btn btn-secondary" onClick={() => void reload()}>
           Try again
@@ -64,9 +71,9 @@ function UserPicker() {
   }
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.userCard}>
       <label className={styles.field}>
-        <span>Who is training?</span>
+        <span className={styles.label}>Training as</span>
         <select
           value={user?.id ?? ''}
           onChange={(e) => selectUser(e.target.value)}
@@ -83,20 +90,14 @@ function UserPicker() {
         </select>
       </label>
 
-      <form className={styles.createForm} onSubmit={onCreate}>
-        <label className={styles.field}>
-          <span>…or add someone new</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Name"
-            maxLength={50}
-            data-new-user
-          />
-        </label>
-        <button type="submit" className="btn btn-secondary" disabled={creating || !name.trim()}>
-          {creating ? 'Adding…' : 'Add'}
-        </button>
+      <form className={styles.field} onSubmit={onCreate}>
+        <span className={styles.label}>New person</span>
+        <div className={styles.inline}>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" maxLength={50} data-new-user />
+          <button type="submit" className="btn btn-secondary" disabled={creating || !name.trim()}>
+            {creating ? 'Adding…' : 'Add'}
+          </button>
+        </div>
       </form>
       {createError && (
         <p className={styles.error} role="alert">
@@ -127,15 +128,19 @@ export default function HomePage() {
 
   return (
     <section className={styles.page}>
-      <h1 className={styles.title}>Pick an exercise</h1>
-      <p className={styles.lead}>
-        The camera watches your form, counts clean reps, and tells you what to fix. Video never leaves this laptop.
-      </p>
-
-      <UserPicker />
+      <div className={styles.hero}>
+        <div>
+          <h1 className={styles.title}>Pick an exercise</h1>
+          <p className={styles.lead}>
+            Your camera watches your form, counts only clean reps, and tells you what to fix. Video never leaves this
+            laptop.
+          </p>
+        </div>
+        <UserCard />
+      </div>
 
       {error && (
-        <div className={styles.panel} role="alert">
+        <div className={styles.notice} role="alert">
           <p className={styles.error}>Couldn't load exercises: {error}</p>
           <button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>
             Try again
@@ -148,19 +153,35 @@ export default function HomePage() {
         {exercises?.map((ex) => (
           <article key={ex.slug} className={styles.card} data-exercise-card={ex.slug}>
             <header className={styles.cardHeader}>
-              <CameraViewIcon view={ex.camera_view} />
-              <div>
+              <span className={styles.icon}>
+                <CameraViewIcon view={ex.camera_view} />
+              </span>
+              <div className={styles.cardTitle}>
                 <h2>{ex.name}</h2>
-                <p className={styles.tags}>
+                <div className={styles.tags}>
                   <span>{BODY_PART_LABEL[ex.body_part]}</span>
                   <span>{ex.camera_view === 'side' ? 'Side view' : 'Front view'}</span>
-                </p>
+                </div>
               </div>
             </header>
-            <p className={styles.instructions}>{ex.instructions}</p>
+
+            <div className={styles.section}>
+              <h3>Setup</h3>
+              <p>{ex.instructions}</p>
+            </div>
+
+            <div className={styles.section}>
+              <h3>What I check</h3>
+              <ul className={styles.checks}>
+                {CHECKS[ex.slug].map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+
             {user ? (
               <Link className={`btn btn-primary ${styles.start}`} to={`/workout/${ex.slug}`}>
-                Start as {user.name} →
+                Start as {user.name}
               </Link>
             ) : (
               <span className={`btn btn-secondary ${styles.start}`} aria-disabled>

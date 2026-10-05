@@ -331,6 +331,12 @@ export interface PressParams {
   leftElbow: Timeline;
   /** Right elbow angle; defaults to the left (symmetric press). */
   rightElbow?: Curve;
+  /**
+   * Degrees added to each upper arm's elevation (default 0). Negative = arm pushed out to the
+   * side instead of up, e.g. −60 keeps a straight arm horizontal (wrist below the nose).
+   */
+  leftElevationOffset?: Curve;
+  rightElevationOffset?: Curve;
 }
 
 /**
@@ -353,9 +359,9 @@ export function generatePress(params: PressParams, opts: GenerateOptions & { vis
   const forearm = 110 * k;
 
   /** outward = +1 for the person's left arm (image right), −1 for the right arm. */
-  const arm = (shoulder: P, elbowAngle: number, outward: 1 | -1) => {
+  const arm = (shoulder: P, elbowAngle: number, outward: 1 | -1, elevationOffset: number) => {
     // Upper arm elevation above horizontal: −15° at 90°, ~60° at 170°.
-    const elevation = -15 + ((elbowAngle - 90) * 75) / 80;
+    const elevation = -15 + ((elbowAngle - 90) * 75) / 80 + elevationOffset;
     const upper = { x: outward * Math.cos(elevation * DEG), y: -Math.sin(elevation * DEG) };
     const elbow = add(shoulder, scale(upper, upperArm));
     // Rotate elbow→shoulder by elbowAngle toward "up": choose the rotation that ends higher.
@@ -369,8 +375,8 @@ export function generatePress(params: PressParams, opts: GenerateOptions & { vis
   return render(params.leftElbow.durationMs, (t) => {
     const left = params.leftElbow.at(t);
     const right = params.rightElbow === undefined ? left : evalCurve(params.rightElbow, t, left);
-    const l = arm(lShoulder, left, 1);
-    const r = arm(rShoulder, right, -1);
+    const l = arm(lShoulder, left, 1, evalCurve(params.leftElevationOffset ?? 0, t, left));
+    const r = arm(rShoulder, right, -1, evalCurve(params.rightElevationOffset ?? 0, t, right));
     const body: Partial<Record<number, P>> = {
       [LM.NOSE]: nose,
       [LM.LEFT_SHOULDER]: lShoulder,

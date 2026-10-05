@@ -38,7 +38,10 @@ require_docker() {
     COMPOSE=(docker-compose -p "$PROJECT")
   else
     fail "Docker Compose is not installed." \
-      "  It comes with Docker Desktop. On Linux: sudo apt install docker-compose-plugin"
+      "  Mac / Windows: it comes with Docker Desktop — install or update Docker Desktop." \
+      "  Ubuntu / Debian: sudo apt-get update && sudo apt-get install docker-compose-plugin" \
+      "  Fedora / RHEL:   sudo dnf install docker-compose-plugin" \
+      "  Then check with:  docker compose version   (see README, section 1)"
   fi
   ok "Docker Compose available (${COMPOSE[0]}${COMPOSE[1]:+ ${COMPOSE[1]}})"
 }

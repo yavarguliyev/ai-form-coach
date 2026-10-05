@@ -12,13 +12,34 @@ Your video never leaves your computer: the body tracking runs inside the browser
 
 | What | Why | How to get it |
 | --- | --- | --- |
-| **Docker Desktop** | Runs the whole app (database, server, website) — nothing else to install | [Download for Mac / Windows](https://www.docker.com/products/docker-desktop/). **Linux:** [Docker Engine](https://docs.docker.com/engine/install/) + the Compose plugin |
+| **Docker Desktop** | Runs the whole app (database, server, website) — nothing else to install | [Download for Mac / Windows](https://www.docker.com/products/docker-desktop/). **Linux:** [Docker Engine](https://docs.docker.com/engine/install/) |
+| **Docker Compose** | Starts the app's 4 parts together | **Mac / Windows: already included in Docker Desktop — nothing to install.** **Linux:** install the Compose plugin (see below) |
 | **Git** *(optional)* | To download the code | macOS: already installed (or run `xcode-select --install`). Windows: [Git for Windows](https://git-scm.com/download/win) — it also gives you **Git Bash**. Or skip Git and use **Code → Download ZIP** on GitHub |
 | **A terminal with bash** | To run the start script | macOS / Linux: the built-in **Terminal**. Windows: **Git Bash** (comes with Git for Windows) or WSL |
 | **Chrome or Edge + a webcam** | To use the app | A laptop's built-in camera is fine |
 
 You do **not** need Python, Node.js, PostgreSQL, VS Code or any programming knowledge — everything
 runs inside Docker. Give Docker about 5 GB of free disk space.
+
+**Check that Docker and Docker Compose are ready** (in a terminal, with Docker running):
+
+```bash
+docker --version          # e.g. "Docker version 27.x"
+docker compose version    # e.g. "Docker Compose version v2.x"
+```
+
+If the second command says `'compose' is not a docker command`, install Docker Compose:
+
+| System | How to install Docker Compose |
+| --- | --- |
+| Mac / Windows | Install or update [Docker Desktop](https://www.docker.com/products/docker-desktop/) — Compose comes with it |
+| Ubuntu / Debian | `sudo apt-get update && sudo apt-get install docker-compose-plugin` |
+| Fedora / RHEL / CentOS | `sudo dnf install docker-compose-plugin` |
+| Other Linux | Follow the [official Compose plugin guide](https://docs.docker.com/compose/install/linux/) |
+
+(The Linux package commands need Docker's own package repository, which you add when you install
+Docker Engine from the link above. The older standalone `docker-compose` command also works — the
+start script detects either one.)
 
 ## 2. Start the app (3 steps)
 
@@ -85,6 +106,7 @@ Tip: press **D** during a workout to open the debug panel (live angles and tunin
 | Problem | Fix |
 | --- | --- |
 | `Docker is not installed` / `not running` | Install Docker Desktop (step 1) and start it. Wait for it to say *running*, then run the script again. |
+| `Docker Compose is not installed` | Mac / Windows: update Docker Desktop. Linux: install the Compose plugin (see "What you need" above). Check with `docker compose version`. |
 | `A required port is busy` | Another program uses 5180, 8010, 55432 or 8090. Close it, or change the port in the `.env` file (created on first start) and run `bash infra/restart.sh`. |
 | "Camera access is blocked" | Click the camera icon in the address bar → **Allow**. On macOS also check **System Settings → Privacy & Security → Camera** for your browser. Close other apps using the camera (Zoom, Teams…). |
 | It doesn't count my reps | Read the message on the video — it says exactly what it can't see or what to do ("Turn sideways to the camera", "Step back — I can't see your knees"). Stand 2–3 m from the camera with your whole body (or both arms and your head for the press) in view. |

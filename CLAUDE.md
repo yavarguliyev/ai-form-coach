@@ -616,7 +616,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 ### Milestone 2 — Pose detection in the browser
 
 - [x] **T-11 Camera hook** — permission handling, friendly error if denied or no camera.
-- [ ] **T-12 Pose landmarker hook** — model + WASM loaded locally per §9, GPU→CPU fallback, rAF loop.
+- [x] **T-12 Pose landmarker hook** — model + WASM loaded locally per §9, GPU→CPU fallback, rAF loop.
       _AC:_ landmarks logged per frame; ≥ 20 fps.
 - [ ] **T-13 Skeleton overlay + debug panel** — draw skeleton on canvas, mirrored display, FPS and raw visibility values in debug panel.
       _AC:_ skeleton tracks the user smoothly and lines up with the body.

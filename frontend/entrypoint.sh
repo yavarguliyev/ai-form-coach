@@ -7,4 +7,5 @@ if ! sha256sum -c node_modules/.lock-hash >/dev/null 2>&1; then
   npm ci
   sha256sum package-lock.json > node_modules/.lock-hash
 fi
+sh scripts/fetch-model.sh
 exec npx vite --host 0.0.0.0 --port 5180 --strictPort

@@ -7,6 +7,6 @@ pydantic-settings==2.15.0
 psycopg[binary]==3.3.6
 
 # dev / test
-pytest
-httpx
-ruff
+pytest==9.1.1
+httpx2==2.13.1  # TestClient transport; successor of httpx (Starlette 1.7 deprecates httpx)
+ruff==0.16.10

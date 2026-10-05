@@ -1,0 +1,15 @@
+[project]
+name = "formcoach-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+# Dependencies are pinned in requirements.txt (installed by the Dockerfile).
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

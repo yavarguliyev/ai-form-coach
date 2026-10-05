@@ -1,9 +1,20 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="FormCoach API")
+from app.config import get_settings
+from app.routers import health
 
+app = FastAPI(
+    title="FormCoach API",
+    description="Stores workout sessions and reps computed by the in-browser pose engine.",
+    version="0.1.0",
+)
 
-# Minimal liveness endpoint for the container healthcheck; T-03 adds the DB check.
-@app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origin_list,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health.router)

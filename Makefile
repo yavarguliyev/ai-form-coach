@@ -73,7 +73,7 @@ ps:
 
 test:
 	$(COMPOSE) exec -T backend pytest -q
-	$(COMPOSE) exec -T frontend npx vitest run
+	$(COMPOSE) exec -T frontend npm test
 
 seed:
 	$(COMPOSE) exec -T backend python -m app.seed

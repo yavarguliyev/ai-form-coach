@@ -45,7 +45,7 @@ This is a presentation demo, not a medical product. No auth, no cloud, no paymen
 | Engine         | Pure TypeScript module inside frontend (`frontend/src/engine/`) — all math lives here                  |
 | Frontend tests | Vitest                                                                                                 |
 | Backend        | Python 3.12 + FastAPI + SQLAlchemy 2.x + Alembic + Pydantic v2                                         |
-| Backend tests  | pytest + httpx TestClient                                                                              |
+| Backend tests  | pytest + TestClient (httpx2)                                                                           |
 | Database       | PostgreSQL 16                                                                                          |
 | DB admin UI    | Adminer (for showing live data during the presentation)                                                |
 | Orchestration  | docker-compose                                                                                         |
@@ -595,7 +595,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
       _AC:_ structure matches §4; `make` targets exist; `make check-ports` reports the 4 ports.
 - [x] **T-02 docker-compose** — Services `db`, `backend`, `frontend`, `adminer` per §5 with healthchecks, project name `formcoach`, `fc_` container names, own network and volume, ports from `.env`.
       _AC:_ `make up` starts all 4 on ports 5180/8010/55432/8090 only; `docker ps` shows no other port used by `fc_*` containers; the existing `ddd_*` containers are untouched and still running; Adminer can log in to the DB.
-- [ ] **T-03 Backend skeleton** — FastAPI app, config, DB session, CORS, `/api/health` checking DB.
+- [x] **T-03 Backend skeleton** — FastAPI app, config, DB session, CORS, `/api/health` checking DB.
       _AC:_ `GET /api/health` → `{status:"ok", db:"ok"}`; `/docs` loads.
 - [ ] **T-04 Frontend skeleton** — Vite + React + TS app with router and 4 empty pages, API client that calls `/api/health` and shows status in the header.
       _AC:_ `localhost:5180` shows "Backend: connected".

@@ -657,7 +657,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 - [x] **T-24 Home page** — user picker/creator, exercise cards from the API.
 - [x] **T-25 Workout page** — setup screen with visibility check, countdown, live counters, cue banner, angle gauge, finish button.
-- [ ] **T-26 Persist session** — create session on start, POST each completed rep immediately (with retry queue), finish on end.
+- [x] **T-26 Persist session** — create session on start, POST each completed rep immediately (with retry queue), finish on end.
       _AC:_ reps appear in Adminer in real time while exercising; killing the backend for 5 s doesn't lose reps.
 - [ ] **T-27 Voice & feedback** — spoken rep counts and cues with cooldowns (§8.9), mute toggle.
 - [ ] **T-28 Summary page** — per §9.

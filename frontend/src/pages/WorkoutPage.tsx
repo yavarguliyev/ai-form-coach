@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useNavigate, useParams } from 'react-router';
+import { api, type RepCreate } from '../api/client';
 import { AngleGauge } from '../components/AngleGauge';
 import { CameraError } from '../components/CameraError';
 import { DebugPanel, type DebugInfo, type Tuning } from '../components/DebugPanel';
@@ -13,6 +14,8 @@ import { validateThresholds, type RejectReason, type RepState } from '../engine/
 import { isGoodRep } from '../engine/scoring';
 import { useCamera } from '../pose/useCamera';
 import { usePoseLandmarker, type PoseFrame } from '../pose/usePoseLandmarker';
+import { useUser } from '../state/UserContext';
+import { FinishTimeoutError, createSessionSync, type SessionSync, type SyncStatus } from '../sync/sessionSync';
 import styles from './WorkoutPage.module.css';
 
 const UI_REFRESH_MS = 250; // per-frame data reaches React at 4 Hz, never per frame (§14)
@@ -22,7 +25,7 @@ const LOG_LIMIT = 12;
 const AUTO_START_AFTER_MS = 1000;
 const COUNTDOWN_FROM = 3;
 
-type Phase = 'setup' | 'countdown' | 'live' | 'done';
+type Phase = 'setup' | 'countdown' | 'live' | 'saving' | 'done';
 type Tone = 'info' | 'ok' | 'warn' | 'error';
 
 type LogEntry =
@@ -66,6 +69,32 @@ function statusBanner(out: AnalyzerOutput | null): { text: string; tone: Tone } 
   return { text: s[out.state], tone: out.state === 'TOP' ? 'ok' : 'info' };
 }
 
+/** Engine rep → API payload. Engine time is performance.now()-based; convert to wall clock. */
+function toRepCreate(r: CompletedRep): RepCreate {
+  const clampAngle = (v: number) => Math.min(180, Math.max(0, v));
+  return {
+    rep_index: r.index,
+    started_at: new Date(performance.timeOrigin + r.startedAtMs).toISOString(),
+    duration_ms: r.durationMs,
+    min_angle: clampAngle(r.minAngle),
+    max_angle: clampAngle(r.maxAngle),
+    score: r.score,
+    errors: r.errors,
+    metrics: r.metrics,
+  };
+}
+
+function syncText(s: SyncStatus | null, hasUser: boolean): { text: string; tone: Tone } {
+  if (!hasUser) return { text: 'Not saving — choose a user on the Home page', tone: 'warn' };
+  if (!s) return { text: 'Connecting to the database…', tone: 'info' };
+  if (s.retrying) {
+    return { text: `Backend unreachable — ${s.pending} rep(s) waiting, retrying…`, tone: 'warn' };
+  }
+  if (s.failed) return { text: `Saved ${s.saved} · ${s.failed} rejected by server (${s.lastError})`, tone: 'error' };
+  if (!s.sessionId) return { text: 'Creating session…', tone: 'info' };
+  return { text: `Saved ${s.saved} rep${s.saved === 1 ? '' : 's'} to the database`, tone: 'ok' };
+}
+
 function initialTuning(def: ExerciseDefinition): Tuning {
   return { thresholds: { ...def.thresholds }, limits: defaultLimits(def) };
 }
@@ -100,6 +129,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const { videoRef, state: realCamera, retry } = useCamera(!REPLAY);
   const camera = REPLAY ? ({ status: 'ready', width: 1280, height: 720 } as const) : realCamera;
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const navigate = useNavigate();
+  const { user } = useUser();
   const [phase, setPhase] = useState<Phase>('setup');
   const phaseRef = useRef<Phase>('setup');
   phaseRef.current = phase;
@@ -131,6 +162,42 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     clearSetState();
   }, [definition, tuning, clearSetState]);
 
+  // --- persistence ----------------------------------------------------------------
+  const syncRef = useRef<SessionSync | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const startSync = useCallback(() => {
+    syncRef.current?.dispose();
+    syncRef.current = null;
+    setSyncStatus(null);
+    setSaveError(null);
+    if (!user) return;
+    const sync = createSessionSync(
+      {
+        createSession: () => api.createSession(user.id, definition.slug),
+        addRep: (sessionId, rep) => api.addRep(sessionId, rep),
+        finishSession: (sessionId, endedAt) => api.finishSession(sessionId, endedAt),
+      },
+      { onChange: setSyncStatus },
+    );
+    syncRef.current = sync;
+    sync.start();
+  }, [user, definition.slug]);
+
+  useEffect(() => () => syncRef.current?.dispose(), []);
+
+  // Warn before closing the tab while a set is running or reps are unsaved.
+  useEffect(() => {
+    const active = phase === 'live' || phase === 'saving' || (syncStatus?.pending ?? 0) > 0;
+    if (!active) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [phase, syncStatus?.pending]);
+
   // --- per-frame processing (refs only) -----------------------------------------
   const lastFrameRef = useRef<PoseFrame | null>(null);
   const lastOutRef = useRef<AnalyzerOutput | null>(null);
@@ -157,6 +224,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
             ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
             : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
           logRef.current = [{ kind: 'rep' as const, rep: r, good: isGoodRep(r.score, r.errors) }, ...logRef.current].slice(0, LOG_LIMIT);
+          // Saved immediately (retried until the backend accepts it).
+          syncRef.current?.enqueue(toRepCreate(r));
         }
         if (out.rejectedRep) {
           const text = rejectionNotice(out.rejectedRep.reason, out.rejectedRep.cue);
@@ -181,14 +250,14 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
   const { model: realModel, fpsRef } = usePoseLandmarker(
     videoRef,
-    !REPLAY && camera.status === 'ready' && phase !== 'done',
+    !REPLAY && camera.status === 'ready' && (phase === 'setup' || phase === 'countdown' || phase === 'live'),
     onFrame,
     !REPLAY,
   );
   const model = REPLAY ? ({ status: 'ready', delegate: 'GPU' } as const) : realModel;
 
   useEffect(() => {
-    if (!REPLAY || phase === 'done') return;
+    if (!REPLAY || phase === 'done' || phase === 'saving') return;
     let handle: { stop(): void } | null = null;
     let cancelled = false;
     void import('../dev/replay').then(({ startReplay }) => {
@@ -266,18 +335,45 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
         // Fresh set: counting starts now (the user must hold the start position again).
         analyzerRef.current.reset();
         clearSetState();
+        startSync();
         setPhase('live');
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [phase, clearSetState]);
+  }, [phase, clearSetState, startSync]);
 
   // Walking out of view during the countdown cancels it.
   useEffect(() => {
     if (phase === 'countdown' && ui.out && (!ui.out.visibilityOk || !ui.out.orientationOk)) setPhase('setup');
   }, [phase, ui.out]);
 
-  const finish = () => setPhase('done');
+  const finish = async () => {
+    const sync = syncRef.current;
+    if (!sync) {
+      setPhase('done'); // nothing to save (no user selected)
+      return;
+    }
+    setPhase('saving');
+    setSaveError(null);
+    try {
+      const sessionId = await sync.finish(new Date().toISOString());
+      navigate(`/sessions/${sessionId}`);
+    } catch (err) {
+      setSaveError(
+        err instanceof FinishTimeoutError
+          ? err.message
+          : `Could not finish the session: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  };
+
+  const discardSet = () => {
+    syncRef.current?.dispose();
+    syncRef.current = null;
+    setSyncStatus(null);
+    setSaveError(null);
+    setPhase('done');
+  };
 
   // --- debug panel toggle ---------------------------------------------------------
   const [showDebug, setShowDebug] = useState(false);
@@ -293,7 +389,9 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
   const reps = useMemo(() => ui.log.flatMap((e) => (e.kind === 'rep' ? [e] : [])), [ui.log]);
   const goodReps = reps.filter((e) => e.good).length;
-  const repCount = phase === 'live' || phase === 'done' ? (ui.out?.repCount ?? 0) : 0;
+  const inSet = phase === 'live' || phase === 'saving' || phase === 'done';
+  const repCount = inSet ? (ui.out?.repCount ?? 0) : 0;
+  const sync = syncText(syncStatus, Boolean(user));
   const width = camera.status === 'ready' ? camera.width : 1280;
   const height = camera.status === 'ready' ? camera.height : 720;
   const banner = ui.notice ?? statusBanner(ui.out);
@@ -306,7 +404,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           <h1>{definition.name}</h1>
           <p className={styles.instructions}>{definition.setupInstructions}</p>
         </div>
-        {(phase === 'live' || phase === 'done') && (
+        {inSet && (
           <div className={styles.counters}>
             <div className={styles.counter}>
               <span className={styles.counterValue} data-rep-count>
@@ -390,7 +488,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
             </div>
           )}
 
-          {(phase === 'live' || phase === 'done') && (
+          {inSet && (
             <>
               <AngleGauge
                 angle={ui.out?.primaryAngle ?? null}
@@ -399,9 +497,34 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                 label={definition.primaryAngleLabel}
               />
               {phase === 'live' && (
-                <button type="button" className={`${styles.primary} ${styles.finish}`} onClick={finish} data-finish>
+                <button type="button" className={`${styles.primary} ${styles.finish}`} onClick={() => void finish()} data-finish>
                   Finish set
                 </button>
+              )}
+              {(phase === 'live' || phase === 'saving') && (
+                <p className={`${styles.syncLine} ${styles[sync.tone]}`} data-sync-status data-tone={sync.tone}>
+                  {sync.text}
+                </p>
+              )}
+              {phase === 'saving' && (
+                <div className={styles.card} data-saving>
+                  <h2>{saveError ? 'Not saved yet' : 'Saving…'}</h2>
+                  {saveError ? (
+                    <>
+                      <p className={styles.errorText}>{saveError}</p>
+                      <div className={styles.row}>
+                        <button type="button" className={styles.primary} onClick={() => void finish()}>
+                          Keep trying
+                        </button>
+                        <button type="button" className={styles.secondary} onClick={discardSet}>
+                          Discard set
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className={styles.muted}>Waiting for every rep to reach the database.</p>
+                  )}
+                </div>
               )}
               {phase === 'done' && (
                 <div className={styles.card} data-done>
@@ -409,6 +532,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                   <p>
                     {repCount} reps · {goodReps} good
                   </p>
+                  <p className={styles.muted}>This set was not saved.</p>
                   <div className={styles.row}>
                     <button
                       type="button"

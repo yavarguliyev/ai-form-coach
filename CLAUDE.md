@@ -602,7 +602,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 ### Milestone 1 — Database & API
 
-- [ ] **T-05 Models + Alembic migration** — tables from §6.
+- [x] **T-05 Models + Alembic migration** — tables from §6.
       _AC:_ migration runs automatically on backend start; tables visible in Adminer.
 - [ ] **T-06 Seed** — 3 exercises + `Demo User`, idempotent.
       _AC:_ restarting the backend doesn't duplicate rows.

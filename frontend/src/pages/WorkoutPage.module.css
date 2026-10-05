@@ -1,64 +1,102 @@
-.page h1 {
-  margin: 0 0 4px;
+/* The whole workout fits the viewport: no scrolling while exercising. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: calc(100vh - var(--header-h) - 2 * var(--page-pad));
+  min-height: 540px;
 }
 
 .top {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 16px;
-}
-
-.instructions {
-  margin: 0;
-  color: var(--text-muted);
-  max-width: 640px;
-}
-
-.counters {
-  display: flex;
-  gap: 32px;
-}
-
-.counter {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-/* Readable from 2–3 m away (§9). */
-.counterValue {
-  font-size: 96px;
-  font-weight: 800;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.good {
-  color: var(--accent);
-}
-
-.counterLabel {
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 14px;
-}
-
-.main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 20px;
-  align-items: start;
-}
-
-.videoCol {
+  align-items: baseline;
+  gap: 14px;
   min-width: 0;
 }
 
-.stageWrap {
+.back {
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.back:hover {
+  color: var(--text);
+}
+
+.top h1 {
+  font-size: 26px;
+  white-space: nowrap;
+}
+
+.viewTag {
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.instructions {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+}
+
+/* ---- video stage ---------------------------------------------------------- */
+
+/* Size container: the video box takes the largest 16:9 that fits both width and height. */
+.stageArea {
+  container-type: size;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.stageBox {
   position: relative;
+  width: min(100cqw, 100cqh * 16 / 9);
+  max-height: 100cqh;
+}
+
+/* Message on the video. Position is chosen per exercise so it never hides needed joints. */
+.overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 12px 24px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: rgba(14, 16, 20, 0.82);
+  backdrop-filter: blur(6px);
+  font-size: clamp(22px, 3.2cqw, 40px);
+  font-weight: 800;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.overlayTop {
+  top: 14px;
+}
+
+.overlayBottom {
+  bottom: 14px;
 }
 
 .countdown {
@@ -66,24 +104,13 @@
   inset: 0;
   display: grid;
   place-items: center;
-  font-size: 220px;
+  font-size: clamp(120px, 28cqh, 260px);
   font-weight: 900;
   color: #fff;
   text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius);
   pointer-events: none;
-}
-
-.banner {
-  margin-top: 12px;
-  padding: 14px 18px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  font-size: 30px;
-  font-weight: 700;
-  min-height: 70px;
 }
 
 .ok {
@@ -99,7 +126,6 @@
 .error {
   border-color: var(--error);
   color: var(--error);
-  background: rgba(242, 95, 92, 0.08);
 }
 
 .info {
@@ -109,7 +135,8 @@
 .holdTrack {
   display: block;
   height: 6px;
-  margin-top: 10px;
+  margin: 10px auto 0;
+  max-width: 320px;
   border-radius: 3px;
   background: var(--border);
   overflow: hidden;
@@ -122,29 +149,99 @@
   transition: width 0.2s linear;
 }
 
+/* ---- sidebar ---------------------------------------------------------------- */
+
 .side {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* Only the rep log may shrink (and scroll); everything else keeps its size. */
+.side > * {
+  flex-shrink: 0;
+}
+
+.side > .logCard {
+  flex-shrink: 1;
 }
 
 .card {
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
 }
 
 .card h2 {
-  margin: 0 0 8px;
+  margin-bottom: 10px;
+  font-size: 16px;
+}
+
+.counters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+/* Readable from 2–3 m away (§9). */
+.counterValue {
+  font-size: 84px;
+  font-weight: 850;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.good {
+  color: var(--accent);
+}
+
+.counterLabel {
+  margin-top: 4px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.finish {
+  width: 100%;
+  height: 56px;
   font-size: 18px;
+}
+
+.syncLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.syncDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
 }
 
 .checklist {
   list-style: none;
   padding: 0;
-  margin: 0 0 12px;
-  font-size: 16px;
+  margin: 0 0 14px;
 }
 
 .checklist li {
@@ -157,65 +254,36 @@
 .checkIcon {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
+  font-size: 13px;
   font-weight: 800;
   flex: none;
 }
 
 .checkOk .checkIcon {
   background: var(--ok);
-  color: #0b0d10;
+  color: #08110c;
 }
 
 .checkPending {
-  color: var(--warn);
+  color: var(--text-muted);
 }
 
 .checkPending .checkIcon {
   border: 2px solid var(--warn);
+  color: var(--warn);
 }
 
 .readyText {
+  margin-bottom: 12px;
   color: var(--ok);
   font-weight: 700;
 }
 
-.primary,
-.secondary {
-  display: inline-block;
-  padding: 12px 18px;
-  border-radius: 10px;
-  font-size: 16px;
-  font-weight: 700;
-  text-align: center;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.primary {
-  border: 0;
-  background: var(--accent);
-  color: #0b0d10;
-}
-
-.primary:disabled {
-  background: var(--border);
-  color: var(--text-muted);
-  cursor: default;
-}
-
-.secondary {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--text);
-}
-
-.finish {
-  width: 100%;
-  padding: 18px;
-  font-size: 20px;
+.card .muted {
+  margin-bottom: 12px;
 }
 
 .row {
@@ -224,42 +292,96 @@
 }
 
 .errorText {
+  margin-bottom: 12px;
   color: var(--error);
 }
 
+/* Log fills the remaining sidebar height and scrolls. */
+.logCard {
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
 .logList {
+  flex: 1;
+  overflow-y: auto;
   list-style: none;
   padding: 0;
-  margin: 8px 0 0;
+  margin: 0;
+}
+
+.logItem {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
   font-size: 14px;
 }
 
-.logList li {
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
+.logItem:first-child {
+  border-top: 0;
 }
 
-.logGood strong {
+.logBadge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  flex: none;
+}
+
+.badgeGood {
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
-.logBad strong {
+.badgeWarn {
+  background: rgba(245, 185, 66, 0.14);
   color: var(--warn);
 }
 
-.logRejected {
+.badgeRejected {
+  background: rgba(242, 95, 92, 0.12);
+  color: var(--error);
+}
+
+.logBody {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.logMeta {
   color: var(--text-muted);
+  font-size: 12px;
 }
 
 .muted {
   color: var(--text-muted);
 }
 
-.syncLine {
-  margin: 0;
-  padding: 8px 12px;
+.hint {
+  margin-top: auto;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.hint kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 6px;
+  margin-right: 4px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 600 11px ui-monospace, Menlo, monospace;
+  text-align: center;
+  color: var(--text);
 }

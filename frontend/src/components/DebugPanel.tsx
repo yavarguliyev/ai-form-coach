@@ -27,6 +27,7 @@ interface Props {
   tuningError: string | null;
   onTuningChange: (tuning: Tuning) => void;
   onResetTuning: () => void;
+  onClose: () => void;
 }
 
 const THRESHOLD_FIELDS: Array<{ key: 'startThreshold' | 'leaveTopThreshold' | 'endThreshold'; label: string }> = [
@@ -72,11 +73,16 @@ function Slider(props: {
 }
 
 /** Live engine numbers + threshold tuning (toggle with "D"). Changes are in-memory only. */
-export function DebugPanel({ info, definition, tuning, tuningError, onTuningChange, onResetTuning }: Props) {
+export function DebugPanel({ info, definition, tuning, tuningError, onTuningChange, onResetTuning, onClose }: Props) {
   const e = info.engine;
   return (
     <aside className={styles.panel} aria-label="Debug panel" data-debug-panel>
-      <h2>Debug · {definition.name}</h2>
+      <div className={styles.head}>
+        <h2>Debug · {definition.name}</h2>
+        <button type="button" className={styles.close} onClick={onClose} aria-label="Close debug panel">
+          ✕
+        </button>
+      </div>
 
       <dl className={styles.grid}>
         <dt>State</dt>
@@ -135,7 +141,7 @@ export function DebugPanel({ info, definition, tuning, tuningError, onTuningChan
         />
       ))}
       {tuningError && <p className={styles.error}>{tuningError}</p>}
-      <button type="button" className={styles.resetBtn} onClick={onResetTuning}>
+      <button type="button" className={`btn btn-secondary ${styles.resetBtn}`} onClick={onResetTuning}>
         Reset to defaults
       </button>
       <p className={styles.hint}>Changes restart the rep counter and are not saved.</p>

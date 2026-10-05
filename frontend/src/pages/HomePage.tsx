@@ -56,7 +56,7 @@ function UserPicker() {
     return (
       <div className={styles.panel} role="alert">
         <p className={styles.error}>Couldn't load users: {error}</p>
-        <button type="button" className={styles.secondary} onClick={() => void reload()}>
+        <button type="button" className="btn btn-secondary" onClick={() => void reload()}>
           Try again
         </button>
       </div>
@@ -94,7 +94,7 @@ function UserPicker() {
             data-new-user
           />
         </label>
-        <button type="submit" className={styles.secondary} disabled={creating || !name.trim()}>
+        <button type="submit" className="btn btn-secondary" disabled={creating || !name.trim()}>
           {creating ? 'Adding…' : 'Add'}
         </button>
       </form>
@@ -126,7 +126,7 @@ export default function HomePage() {
   }, [attempt]);
 
   return (
-    <section>
+    <section className={styles.page}>
       <h1 className={styles.title}>Pick an exercise</h1>
       <p className={styles.lead}>
         The camera watches your form, counts clean reps, and tells you what to fix. Video never leaves this laptop.
@@ -137,7 +137,7 @@ export default function HomePage() {
       {error && (
         <div className={styles.panel} role="alert">
           <p className={styles.error}>Couldn't load exercises: {error}</p>
-          <button type="button" className={styles.secondary} onClick={() => setAttempt((n) => n + 1)}>
+          <button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>
             Try again
           </button>
         </div>
@@ -159,11 +159,11 @@ export default function HomePage() {
             </header>
             <p className={styles.instructions}>{ex.instructions}</p>
             {user ? (
-              <Link className={styles.start} to={`/workout/${ex.slug}`}>
-                Start as {user.name}
+              <Link className={`btn btn-primary ${styles.start}`} to={`/workout/${ex.slug}`}>
+                Start as {user.name} →
               </Link>
             ) : (
-              <span className={`${styles.start} ${styles.disabled}`} aria-disabled>
+              <span className={`btn btn-secondary ${styles.start}`} aria-disabled>
                 Choose a user first
               </span>
             )}

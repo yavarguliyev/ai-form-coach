@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { api, type RepCreate } from '../api/client';
 import { AngleGauge } from '../components/AngleGauge';
@@ -9,6 +9,7 @@ import { VideoCanvas } from '../components/VideoCanvas';
 import { createAnalyzer, type Analyzer, type AnalyzerOutput, type CompletedRep } from '../engine/analyzer';
 import { CUE_TEXT, type ErrorCode } from '../engine/errorCodes';
 import { getExercise } from '../engine/exercises';
+import { LM } from '../engine/landmarks';
 import { defaultLimits, type ExerciseDefinition } from '../engine/exercises/types';
 import { validateThresholds, type RejectReason, type RepState } from '../engine/repCounter';
 import { isGoodRep } from '../engine/scoring';
@@ -144,7 +145,11 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   // Latest event message (cue, counted rep, rejected rep), shown for CUE_VISIBLE_MS.
   const noticeRef = useRef<{ text: string; tone: Tone; atMs: number } | null>(null);
 
+  // Counted separately: the log only keeps the last LOG_LIMIT entries.
+  const goodCountRef = useRef(0);
+
   const clearSetState = useCallback(() => {
+    goodCountRef.current = 0;
     logRef.current = [];
     cueRef.current = null;
     noticeRef.current = null;
@@ -202,11 +207,19 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const lastFrameRef = useRef<PoseFrame | null>(null);
   const lastOutRef = useRef<AnalyzerOutput | null>(null);
   const framesRef = useRef(0);
+  const fpsRef = useRef({ fps: 0, windowStart: 0, windowFrames: 0 });
 
   const onFrame = useCallback(
     (frame: PoseFrame) => {
       lastFrameRef.current = frame;
       framesRef.current += 1;
+      const f = fpsRef.current;
+      f.windowFrames += 1;
+      if (frame.timestampMs - f.windowStart >= 1000) {
+        f.fps = (f.windowFrames * 1000) / (frame.timestampMs - f.windowStart || 1);
+        f.windowStart = frame.timestampMs;
+        f.windowFrames = 0;
+      }
       const out = analyzerRef.current.processFrame(frame.landmarks, frame.videoWidth, frame.videoHeight, frame.timestampMs);
       lastOutRef.current = out;
       const live = phaseRef.current === 'live';
@@ -223,7 +236,9 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           noticeRef.current = r.errors.length
             ? { text: `Rep ${r.index} — ${CUE_TEXT[r.errors[0]]}`, tone: 'warn', atMs: now }
             : { text: `Rep ${r.index} counted`, tone: 'ok', atMs: now };
-          logRef.current = [{ kind: 'rep' as const, rep: r, good: isGoodRep(r.score, r.errors) }, ...logRef.current].slice(0, LOG_LIMIT);
+          const good = isGoodRep(r.score, r.errors);
+          if (good) goodCountRef.current += 1;
+          logRef.current = [{ kind: 'rep' as const, rep: r, good }, ...logRef.current].slice(0, LOG_LIMIT);
           // Saved immediately (retried until the backend accepts it).
           syncRef.current?.enqueue(toRepCreate(r));
         }
@@ -248,7 +263,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     [definition],
   );
 
-  const { model: realModel, fpsRef } = usePoseLandmarker(
+  const { model: realModel } = usePoseLandmarker(
     videoRef,
     !REPLAY && camera.status === 'ready' && (phase === 'setup' || phase === 'countdown' || phase === 'live'),
     onFrame,
@@ -274,8 +289,9 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     out: AnalyzerOutput | null;
     notice: { text: string; tone: Tone } | null;
     log: LogEntry[];
+    goodReps: number;
     debug: DebugInfo | null;
-  }>({ out: null, notice: null, log: [], debug: null });
+  }>({ out: null, notice: null, log: [], goodReps: 0, debug: null });
 
   useEffect(() => {
     if (model.status !== 'ready') return;
@@ -287,8 +303,9 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
         out: lastOutRef.current,
         notice: notice && now - notice.atMs < CUE_VISIBLE_MS ? { text: notice.text, tone: notice.tone } : null,
         log: logRef.current,
+        goodReps: goodCountRef.current,
         debug: {
-          fps: fpsRef.current,
+          fps: fpsRef.current.fps,
           delegate: model.delegate,
           frames: framesRef.current,
           videoWidth: f?.videoWidth ?? 0,
@@ -299,7 +316,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
       });
     }, UI_REFRESH_MS);
     return () => clearInterval(id);
-  }, [model, fpsRef]);
+  }, [model]);
 
   // --- setup checks → auto countdown → live -----------------------------------------
   const checks = {
@@ -387,8 +404,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const reps = useMemo(() => ui.log.flatMap((e) => (e.kind === 'rep' ? [e] : [])), [ui.log]);
-  const goodReps = reps.filter((e) => e.good).length;
+  const goodReps = ui.goodReps;
   const inSet = phase === 'live' || phase === 'saving' || phase === 'done';
   const repCount = inSet ? (ui.out?.repCount ?? 0) : 0;
   const sync = syncText(syncStatus, Boolean(user));
@@ -397,187 +413,217 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
   const banner = ui.notice ?? statusBanner(ui.out);
   const showHold = !ui.notice && ui.out?.state === 'READY' && ui.out.visibilityOk && !ui.out.positionHint;
 
+  // Overlays must not hide joints the exercise needs: if it needs the ankles (squat), put
+  // messages at the top of the video; otherwise (curl, press — hands go up high) at the bottom.
+  const needsFeet = [LM.LEFT_ANKLE, LM.RIGHT_ANKLE].some((i) =>
+    [...definition.requiredLandmarks('left'), ...definition.requiredLandmarks('right')].includes(i),
+  );
+  const overlayPos = needsFeet ? styles.overlayTop : styles.overlayBottom;
+
+  // First unmet setup check, shown big on the video so it's readable from 2–3 m away.
+  const setupMessage = !checks.camera
+    ? camera.status === 'requesting'
+      ? 'Allow camera access'
+      : null
+    : !checks.model
+      ? 'Loading pose model…'
+      : !checks.visible
+        ? (ui.out?.visibilityMessage ?? 'Step into the camera view')
+        : !checks.orientation
+          ? (ui.out?.orientationHint ?? (definition.cameraView === 'side' ? 'Turn sideways to the camera' : 'Face the camera'))
+          : 'Hold still — starting…';
+
   return (
     <section className={styles.page} data-phase={phase}>
       <header className={styles.top}>
-        <div>
-          <h1>{definition.name}</h1>
-          <p className={styles.instructions}>{definition.setupInstructions}</p>
-        </div>
-        {inSet && (
-          <div className={styles.counters}>
-            <div className={styles.counter}>
-              <span className={styles.counterValue} data-rep-count>
-                {repCount}
-              </span>
-              <span className={styles.counterLabel}>reps</span>
-            </div>
-            <div className={styles.counter}>
-              <span className={`${styles.counterValue} ${styles.good}`} data-good-count>
-                {goodReps}
-              </span>
-              <span className={styles.counterLabel}>good</span>
-            </div>
-          </div>
-        )}
+        <Link to="/" className={styles.back}>
+          ← Exercises
+        </Link>
+        <h1>{definition.name}</h1>
+        <span className={styles.viewTag}>{definition.cameraView === 'side' ? 'Side view' : 'Front view'}</span>
+        <p className={styles.instructions} title={definition.setupInstructions}>
+          {definition.setupInstructions}
+        </p>
       </header>
 
-      {camera.status === 'error' && <CameraError kind={camera.kind} detail={camera.detail} onRetry={retry} />}
+      {camera.status === 'error' ? (
+        <CameraError kind={camera.kind} detail={camera.detail} onRetry={retry} />
+      ) : (
+        <div className={styles.layout}>
+          <div className={styles.stageArea}>
+            <div className={styles.stageBox} style={{ aspectRatio: `${width} / ${height}` }}>
+              <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} />
 
-      <div className={styles.main}>
-        <div className={styles.videoCol}>
-          <div className={styles.stageWrap}>
-            <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} hidden={camera.status === 'error'} />
-            {phase === 'countdown' && (
-              <div className={styles.countdown} data-countdown aria-live="assertive">
-                {count}
-              </div>
-            )}
+              {phase === 'setup' && (
+                <div className={`${styles.overlay} ${overlayPos} ${setupReady ? styles.ok : styles.warn}`} data-setup-overlay>
+                  {setupMessage}
+                </div>
+              )}
+              {phase === 'countdown' && (
+                <div className={styles.countdown} data-countdown aria-live="assertive">
+                  {count}
+                </div>
+              )}
+              {phase === 'live' && (
+                <div className={`${styles.overlay} ${overlayPos} ${styles[banner.tone]}`} data-banner data-tone={banner.tone} role="status">
+                  {banner.text}
+                  {showHold && (
+                    <span className={styles.holdTrack} aria-hidden>
+                      <span className={styles.holdFill} style={{ width: `${(ui.out?.holdProgress ?? 0) * 100}%` }} />
+                    </span>
+                  )}
+                </div>
+              )}
+              {model.status === 'error' && (
+                <div className={`${styles.overlay} ${overlayPos} ${styles.error}`}>Pose detection unavailable: {model.detail}</div>
+              )}
+            </div>
           </div>
 
-          {phase === 'live' && (
-            <div className={`${styles.banner} ${styles[banner.tone]}`} data-banner data-tone={banner.tone} role="status">
-              {banner.text}
-              {showHold && (
-                <span className={styles.holdTrack} aria-hidden>
-                  <span className={styles.holdFill} style={{ width: `${(ui.out?.holdProgress ?? 0) * 100}%` }} />
-                </span>
-              )}
-            </div>
-          )}
-          {phase !== 'live' && model.status === 'error' && (
-            <p className={styles.errorText}>Pose detection unavailable: {model.detail}</p>
-          )}
-        </div>
-
-        <aside className={styles.side}>
-          {phase === 'setup' && (
-            <div className={styles.card} data-setup>
-              <h2>Get into position</h2>
-              <ul className={styles.checklist}>
-                <Check ok={checks.camera} label={camera.status === 'requesting' ? 'Waiting for camera permission…' : 'Camera on'} />
-                <Check ok={checks.model} label={model.status === 'loading' ? 'Loading pose model…' : 'Pose model ready'} />
-                <Check
-                  ok={checks.visible}
-                  label={checks.visible ? 'Body visible' : (ui.out?.visibilityMessage ?? 'Step into the camera view')}
-                />
-                <Check
-                  ok={checks.orientation}
-                  label={
-                    checks.orientation
-                      ? definition.cameraView === 'side'
-                        ? 'Standing sideways'
-                        : 'Facing the camera'
-                      : (ui.out?.orientationHint ?? (definition.cameraView === 'side' ? 'Turn sideways to the camera' : 'Face the camera'))
-                  }
-                />
-              </ul>
-              <p className={setupReady ? styles.readyText : styles.muted} data-setup-status>
-                {setupReady ? 'Ready — starting…' : 'The countdown starts by itself once everything is green.'}
-              </p>
-              <button type="button" className={styles.primary} disabled={!setupReady} onClick={() => setPhase('countdown')}>
-                Start now
-              </button>
-            </div>
-          )}
-
-          {phase === 'countdown' && (
-            <div className={styles.card}>
-              <h2>Get ready</h2>
-              <p className={styles.muted}>{definition.startHint}.</p>
-            </div>
-          )}
-
-          {inSet && (
-            <>
-              <AngleGauge
-                angle={ui.out?.primaryAngle ?? null}
-                startThreshold={analyzerRef.current.thresholds.startThreshold}
-                endThreshold={analyzerRef.current.thresholds.endThreshold}
-                label={definition.primaryAngleLabel}
-              />
-              {phase === 'live' && (
-                <button type="button" className={`${styles.primary} ${styles.finish}`} onClick={() => void finish()} data-finish>
-                  Finish set
-                </button>
-              )}
-              {(phase === 'live' || phase === 'saving') && (
-                <p className={`${styles.syncLine} ${styles[sync.tone]}`} data-sync-status data-tone={sync.tone}>
-                  {sync.text}
+          <aside className={styles.side}>
+            {phase === 'setup' && (
+              <div className={styles.card} data-setup>
+                <h2>Get into position</h2>
+                <ul className={styles.checklist}>
+                  <Check ok={checks.camera} label={camera.status === 'requesting' ? 'Waiting for camera permission…' : 'Camera on'} />
+                  <Check ok={checks.model} label={model.status === 'loading' ? 'Loading pose model…' : 'Pose model ready'} />
+                  <Check ok={checks.visible} label="Whole body visible" />
+                  <Check
+                    ok={checks.orientation}
+                    label={definition.cameraView === 'side' ? 'Standing sideways' : 'Facing the camera'}
+                  />
+                </ul>
+                <p className={setupReady ? styles.readyText : styles.muted} data-setup-status>
+                  {setupReady ? 'Ready — starting…' : 'The countdown starts by itself once everything is green.'}
                 </p>
-              )}
-              {phase === 'saving' && (
-                <div className={styles.card} data-saving>
-                  <h2>{saveError ? 'Not saved yet' : 'Saving…'}</h2>
-                  {saveError ? (
-                    <>
-                      <p className={styles.errorText}>{saveError}</p>
-                      <div className={styles.row}>
-                        <button type="button" className={styles.primary} onClick={() => void finish()}>
-                          Keep trying
-                        </button>
-                        <button type="button" className={styles.secondary} onClick={discardSet}>
-                          Discard set
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <p className={styles.muted}>Waiting for every rep to reach the database.</p>
-                  )}
-                </div>
-              )}
-              {phase === 'done' && (
-                <div className={styles.card} data-done>
-                  <h2>Set finished</h2>
-                  <p>
-                    {repCount} reps · {goodReps} good
-                  </p>
-                  <p className={styles.muted}>This set was not saved.</p>
-                  <div className={styles.row}>
-                    <button
-                      type="button"
-                      className={styles.primary}
-                      onClick={() => {
-                        clearSetState();
-                        setPhase('setup');
-                      }}
-                    >
-                      New set
-                    </button>
-                    <Link className={styles.secondary} to="/">
-                      Done
-                    </Link>
+                <button type="button" className="btn btn-primary" disabled={!setupReady} onClick={() => setPhase('countdown')}>
+                  Start now
+                </button>
+              </div>
+            )}
+
+            {phase === 'countdown' && (
+              <div className={styles.card}>
+                <h2>Get ready</h2>
+                <p className={styles.muted}>{definition.startHint}.</p>
+              </div>
+            )}
+
+            {inSet && (
+              <>
+                <div className={styles.counters}>
+                  <div className={styles.counter}>
+                    <span className={styles.counterValue} data-rep-count>
+                      {repCount}
+                    </span>
+                    <span className={styles.counterLabel}>Reps</span>
+                  </div>
+                  <div className={styles.counter}>
+                    <span className={`${styles.counterValue} ${styles.good}`} data-good-count>
+                      {goodReps}
+                    </span>
+                    <span className={styles.counterLabel}>Good</span>
                   </div>
                 </div>
-              )}
-              <div className={styles.card} aria-label="Rep log">
-                <h2>Rep log</h2>
-                {ui.log.length === 0 && <p className={styles.muted}>Counted and rejected reps appear here.</p>}
-                <ol className={styles.logList} data-rep-log>
-                  {ui.log.map((e, i) =>
-                    e.kind === 'rep' ? (
-                      <li key={i} className={e.good ? styles.logGood : styles.logBad}>
-                        <strong>#{e.rep.index}</strong> score {e.rep.score}
-                        {e.rep.errors.length > 0 && ` · ${e.rep.errors.map((c) => CUE_TEXT[c]).join(', ')}`}
-                        <span className={styles.muted}>
-                          {' '}
-                          · {e.rep.minAngle.toFixed(0)}–{e.rep.maxAngle.toFixed(0)}° · {(e.rep.durationMs / 1000).toFixed(1)} s
-                        </span>
-                      </li>
+
+                <AngleGauge
+                  angle={ui.out?.primaryAngle ?? null}
+                  startThreshold={analyzerRef.current.thresholds.startThreshold}
+                  endThreshold={analyzerRef.current.thresholds.endThreshold}
+                  label={definition.primaryAngleLabel}
+                />
+
+                {phase === 'live' && (
+                  <button type="button" className={`btn btn-primary ${styles.finish}`} onClick={() => void finish()} data-finish>
+                    Finish set
+                  </button>
+                )}
+                {(phase === 'live' || phase === 'saving') && (
+                  <p className={`${styles.syncLine} ${styles[sync.tone]}`} data-sync-status data-tone={sync.tone}>
+                    <span className={styles.syncDot} aria-hidden />
+                    {sync.text}
+                  </p>
+                )}
+                {phase === 'saving' && (
+                  <div className={styles.card} data-saving>
+                    <h2>{saveError ? 'Not saved yet' : 'Saving…'}</h2>
+                    {saveError ? (
+                      <>
+                        <p className={styles.errorText}>{saveError}</p>
+                        <div className={styles.row}>
+                          <button type="button" className="btn btn-primary" onClick={() => void finish()}>
+                            Keep trying
+                          </button>
+                          <button type="button" className="btn btn-secondary" onClick={discardSet}>
+                            Discard set
+                          </button>
+                        </div>
+                      </>
                     ) : (
-                      <li key={i} className={styles.logRejected}>
-                        {REJECT_TEXT[e.reason]}
-                        {e.cue && ` · “${CUE_TEXT[e.cue]}”`}
-                      </li>
-                    ),
-                  )}
-                </ol>
-              </div>
-            </>
-          )}
-          <p className={styles.muted}>Press D for the debug and tuning panel.</p>
-        </aside>
-      </div>
+                      <p className={styles.muted}>Waiting for every rep to reach the database.</p>
+                    )}
+                  </div>
+                )}
+                {phase === 'done' && (
+                  <div className={styles.card} data-done>
+                    <h2>Set finished</h2>
+                    <p className={styles.muted}>This set was not saved (no user selected).</p>
+                    <div className={styles.row}>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => {
+                          clearSetState();
+                          setPhase('setup');
+                        }}
+                      >
+                        New set
+                      </button>
+                      <Link className="btn btn-secondary" to="/">
+                        Done
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                <div className={`${styles.card} ${styles.logCard}`} aria-label="Rep log">
+                  <h2>Rep log</h2>
+                  {ui.log.length === 0 && <p className={styles.muted}>Counted and rejected reps appear here.</p>}
+                  <ol className={styles.logList} data-rep-log>
+                    {ui.log.map((e, i) =>
+                      e.kind === 'rep' ? (
+                        <li key={i} className={styles.logItem}>
+                          <span className={`${styles.logBadge} ${e.good ? styles.badgeGood : styles.badgeWarn}`}>#{e.rep.index}</span>
+                          <span className={styles.logBody}>
+                            <span>
+                              Score <strong>{e.rep.score}</strong>
+                              {e.rep.errors.length > 0 && ` · ${e.rep.errors.map((c) => CUE_TEXT[c]).join(', ')}`}
+                            </span>
+                            <span className={styles.logMeta}>
+                              {e.rep.minAngle.toFixed(0)}–{e.rep.maxAngle.toFixed(0)}° · {(e.rep.durationMs / 1000).toFixed(1)} s
+                            </span>
+                          </span>
+                        </li>
+                      ) : (
+                        <li key={i} className={styles.logItem}>
+                          <span className={`${styles.logBadge} ${styles.badgeRejected}`}>✕</span>
+                          <span className={styles.logBody}>
+                            <span className={styles.muted}>{REJECT_TEXT[e.reason]}</span>
+                            {e.cue && <span className={styles.logMeta}>“{CUE_TEXT[e.cue]}”</span>}
+                          </span>
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                </div>
+              </>
+            )}
+            <p className={styles.hint}>
+              <kbd>D</kbd> debug &amp; tuning panel
+            </p>
+          </aside>
+        </div>
+      )}
 
       {showDebug && ui.debug && (
         <DebugPanel
@@ -587,6 +633,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           tuningError={tuningError}
           onTuningChange={setTuning}
           onResetTuning={() => setTuning(initialTuning(definition))}
+          onClose={() => setShowDebug(false)}
         />
       )}
     </section>

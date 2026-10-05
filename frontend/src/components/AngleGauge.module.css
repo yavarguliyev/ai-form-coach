@@ -1,6 +1,6 @@
 .gauge {
   margin: 0;
-  padding: 12px 16px;
+  padding: 10px 16px 12px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface);
@@ -8,8 +8,10 @@
 }
 
 .gauge svg {
+  display: block;
   width: 100%;
-  max-width: 240px;
+  max-width: 190px;
+  margin: 0 auto;
 }
 
 .track {
@@ -21,7 +23,7 @@
 
 .range {
   fill: none;
-  stroke: rgba(61, 220, 151, 0.35);
+  stroke: rgba(61, 220, 151, 0.4);
   stroke-width: 10;
 }
 
@@ -55,7 +57,8 @@
 }
 
 .value {
-  font-size: 40px;
+  font-size: 34px;
+  line-height: 1.1;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }

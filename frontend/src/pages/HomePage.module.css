@@ -1,12 +1,17 @@
+.page {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
 .title {
-  margin: 0 0 6px;
-  font-size: 34px;
+  margin-bottom: 6px;
+  font-size: 32px;
 }
 
 .lead {
-  margin: 0 0 20px;
+  margin-bottom: 24px;
   color: var(--text-muted);
-  max-width: 720px;
+  max-width: 640px;
 }
 
 .panel {
@@ -14,10 +19,10 @@
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 16px 32px;
-  padding: 16px 20px;
+  padding: 18px 20px;
   margin-bottom: 24px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
 }
 
@@ -25,19 +30,26 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-muted);
 }
 
 .field select,
 .field input {
-  min-width: 220px;
-  padding: 10px 12px;
+  min-width: 240px;
+  height: 44px;
+  padding: 0 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text);
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.field input::placeholder {
+  color: var(--text-muted);
 }
 
 .createForm {
@@ -46,24 +58,8 @@
   gap: 8px;
 }
 
-.secondary {
-  padding: 10px 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text);
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.secondary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .error {
   flex-basis: 100%;
-  margin: 0;
   color: var(--error);
 }
 
@@ -80,10 +76,17 @@
 .card {
   display: flex;
   flex-direction: column;
+  gap: 14px;
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--surface);
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.card:hover {
+  border-color: #3a4150;
+  transform: translateY(-2px);
 }
 
 .cardHeader {
@@ -93,26 +96,25 @@
 }
 
 .cardHeader h2 {
-  margin: 0;
-  font-size: 22px;
+  font-size: 21px;
 }
 
 .viewIcon {
   flex: none;
   padding: 6px;
   border-radius: 10px;
-  background: rgba(61, 220, 151, 0.1);
+  background: var(--accent-soft);
   color: var(--accent);
 }
 
 .tags {
   display: flex;
-  gap: 8px;
-  margin: 4px 0 0;
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .tags span {
-  padding: 2px 8px;
+  padding: 2px 9px;
   border-radius: 999px;
   border: 1px solid var(--border);
   font-size: 12px;
@@ -122,21 +124,11 @@
 .instructions {
   flex: 1;
   color: var(--text-muted);
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .start {
-  display: block;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: #0b0d10;
-  font-weight: 700;
-  text-align: center;
-  text-decoration: none;
-}
-
-.disabled {
-  background: var(--border);
-  color: var(--text-muted);
+  width: 100%;
+  height: 48px;
 }

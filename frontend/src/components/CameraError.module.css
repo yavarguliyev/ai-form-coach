@@ -10,16 +10,9 @@
   margin: 0 0 8px;
 }
 
-.box button {
-  margin-top: 8px;
-  padding: 10px 20px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #0b0d10;
-  font-weight: 600;
-  font-size: 16px;
-  cursor: pointer;
+.box p {
+  margin-bottom: 14px;
+  color: var(--text-muted);
 }
 
 .detail {

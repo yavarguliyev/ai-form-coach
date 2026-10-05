@@ -1,9 +1,8 @@
 .stage {
   position: relative;
   width: 100%;
-  max-width: 1100px;
   background: #000;
-  border-radius: 12px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 

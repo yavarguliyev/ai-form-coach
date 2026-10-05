@@ -1,24 +1,34 @@
 import { NavLink, Outlet } from 'react-router';
-import { EXERCISES } from '../engine/exercises';
+import { useUser } from '../state/UserContext';
 import { BackendStatus } from './BackendStatus';
 import styles from './Layout.module.css';
 
 export function Layout() {
+  const { user } = useUser();
   const linkClass = ({ isActive }: { isActive: boolean }) => (isActive ? styles.active : undefined);
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
-        <span className={styles.brand}>FormCoach AI</span>
-        <nav className={styles.nav}>
-          <NavLink to="/" end className={linkClass}>Home</NavLink>
-          {Object.values(EXERCISES).map((ex) => (
-            <NavLink key={ex.slug} to={`/workout/${ex.slug}`} className={linkClass}>
-              {ex.name}
-            </NavLink>
-          ))}
-          <NavLink to="/history" className={linkClass}>History</NavLink>
+        <NavLink to="/" className={styles.brand}>
+          <span className={styles.logo} aria-hidden />
+          FormCoach <span className={styles.brandAi}>AI</span>
+        </NavLink>
+        <nav className={styles.nav} aria-label="Main">
+          <NavLink to="/" end className={linkClass}>
+            Exercises
+          </NavLink>
+          <NavLink to="/history" className={linkClass}>
+            History
+          </NavLink>
         </nav>
-        <BackendStatus />
+        <div className={styles.right}>
+          {user && (
+            <span className={styles.user} title="Change the user on the Exercises page">
+              {user.name}
+            </span>
+          )}
+          <BackendStatus />
+        </div>
       </header>
       <main className={styles.main}>
         <Outlet />

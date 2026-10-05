@@ -42,7 +42,7 @@ export function CameraError({ kind, detail, onRetry }: Props) {
     <div className={styles.box} role="alert" data-camera-error={kind}>
       <h2>{title}</h2>
       <p>{help}</p>
-      <button type="button" onClick={onRetry}>
+      <button type="button" className="btn btn-primary" onClick={onRetry}>
         Try again
       </button>
       <p className={styles.detail}>{detail}</p>

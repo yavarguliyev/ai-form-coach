@@ -632,7 +632,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 - [x] **T-15 Smoothing + visibility gate + side selection** (§8.4, §8.5) with tests.
 - [x] **T-16 Generic rep state machine** (§8.6) supporting both directions, min/max rep time, partial-rep rejection, with tests.
 - [x] **T-17 Scoring** (§8.8) with tests.
-- [ ] **T-18 Synthetic data generator** — test utility producing landmark sequences for given angle curves, frame rate, noise, and visibility drops.
+- [x] **T-18 Synthetic data generator** — test utility producing landmark sequences for given angle curves, frame rate, noise, and visibility drops.
 - [ ] **T-19 Analyzer** (§8.10) wiring everything together.
       _AC:_ all tests from §8.11 that don't depend on specific exercises pass.
 

@@ -28,7 +28,7 @@ export function speechAvailable(): boolean {
 export function speak(utterances: readonly Utterance[]): void {
   if (!speechAvailable() || utterances.length === 0) return;
   const synth = window.speechSynthesis;
-  if (utterances.some((u) => u.interrupt)) synth.cancel();
+  // Queue only — never cancel: a cut-off cue is a mistake the user never hears.
   for (const u of utterances) {
     const msg = new SpeechSynthesisUtterance(u.text);
     msg.lang = 'en-US';

@@ -248,3 +248,61 @@ describe('tunable limits', () => {
     expect(run(leaning, relaxed).completed[0].errors).toEqual([]);
   });
 });
+
+describe('every attempt is reported (counted or missed)', () => {
+  it('numbers attempts across counted and missed reps', () => {
+    // clean, shallow (to 120°), clean, fast bounce (< 600 ms), clean
+    const knee = timeline(START, REP, sweep(170, 120, 2000), REP, sweep(170, 85, 500), hold(170, 400), REP, END);
+    const r = run(generateSquat({ knee, torsoLean: UPRIGHT }));
+    const missed = r.outputs.flatMap((o) => (o.missedAttempt ? [o.missedAttempt] : []));
+    expect(r.completed.map((c) => [c.index, c.attemptIndex])).toEqual([
+      [1, 1],
+      [2, 3],
+      [3, 5],
+    ]);
+    expect(missed.map((m) => [m.attemptIndex, m.reason, m.code, m.penalized])).toEqual([
+      [2, 'partial', 'SQUAT_SHALLOW', true],
+      [4, 'too_short', 'SQUAT_TOO_FAST', true],
+    ]);
+    expect(missed[0].minAngle).toBeGreaterThan(115); // it only got to ~120°
+    expect(r.last.missedCount).toBe(2);
+    expect(r.last.repCount).toBe(3);
+  });
+
+  it('3 clean + 9 half reps → 3 counted, 9 missed (nothing silently dropped)', () => {
+    const knee = timeline(START, repeat(REP, 3), repeat(sweep(170, 125, 2000), 9), END);
+    const r = run(generateSquat({ knee, torsoLean: UPRIGHT }));
+    expect(r.last.repCount).toBe(3);
+    expect(r.last.missedCount).toBe(9);
+    expect(r.outputs.filter((o) => o.missedAttempt).length).toBe(9);
+  });
+
+  it('a wobble near the top is not an attempt', () => {
+    const r = run(generateSquat({ knee: timeline(START, repeat(sweep(170, 140, 2000), 4), END), torsoLean: UPRIGHT }));
+    expect(r.rejected.length).toBe(4); // rejected by the counter…
+    expect(r.outputs.some((o) => o.missedAttempt)).toBe(false); // …but not attempts
+    expect(r.last.missedCount).toBe(0);
+  });
+
+  it('an attempt lost by the camera is reported as not penalized', () => {
+    const frames = generateSquat(
+      { knee: timeline(START, REP, END), torsoLean: UPRIGHT },
+      { drops: [{ fromMs: 1400, toMs: 2200, landmarks: [LM.LEFT_KNEE, LM.RIGHT_KNEE], visibility: 0.05 }] },
+    );
+    const r = run(frames);
+    const missed = r.outputs.flatMap((o) => (o.missedAttempt ? [o.missedAttempt] : []));
+    expect(missed).toEqual([expect.objectContaining({ reason: 'lost_tracking', penalized: false, code: null })]);
+    expect(r.last.missedCount).toBe(0);
+    expect(r.last.unseenCount).toBe(1);
+  });
+
+  it('reset() clears attempt numbering and counts', () => {
+    const analyzer = createAnalyzer(testExercise);
+    const frames = generateSquat({ knee: timeline(START, sweep(170, 120, 2000), REP, END), torsoLean: UPRIGHT });
+    run(frames, analyzer);
+    analyzer.reset();
+    const again = run(frames, analyzer);
+    expect(again.completed[0].attemptIndex).toBe(2);
+    expect(again.last.missedCount).toBe(1);
+  });
+});

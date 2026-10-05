@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api, type ExerciseStats, type Session, type UserStats } from '../api/client';
-import { CUE_TEXT, isRepErrorCode } from '../engine/errorCodes';
+import { CUE_TEXT, isMissErrorCode, isRepErrorCode } from '../engine/errorCodes';
 import type { ExerciseSlug } from '../engine/exercises/types';
 import { MISTAKE_TIPS } from '../feedback/tips';
 import { formatDate, formatDateTime, formatDuration } from '../format';
@@ -28,6 +28,7 @@ import styles from './HistoryPage.module.css';
 // The brand accent #3ddc97 is too light for filled marks on dark, so marks use these steps.
 const SERIES_GOOD = '#199e70';
 const SERIES_OTHER = '#3987e5';
+const SERIES_MISSED = '#d95926'; // validated as a 3-colour set with the two above (all pairs)
 const SURFACE = '#161920'; // gap / ring colour = card surface
 const GRID = '#272c36';
 const TICK = '#8d94a1';
@@ -45,7 +46,9 @@ interface Point {
   avg: number | null;
   good: number;
   other: number;
+  missed: number;
   total: number;
+  attempts: number;
 }
 
 function ChartTooltip({
@@ -74,7 +77,12 @@ function ChartTooltip({
           <div>
             <span className={styles.key} style={{ background: SERIES_OTHER }} /> Needs work <strong>{p.other}</strong>
           </div>
-          <div className={styles.tooltipMuted}>{p.total} reps in total</div>
+          <div>
+            <span className={styles.key} style={{ background: SERIES_MISSED }} /> Missed <strong>{p.missed}</strong>
+          </div>
+          <div className={styles.tooltipMuted}>
+            {p.total} counted of {p.attempts} attempts
+          </div>
         </>
       )}
     </div>
@@ -88,7 +96,9 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
     avg: s.avg_score,
     good: s.good_reps,
     other: s.total_reps - s.good_reps,
+    missed: s.missed_reps,
     total: s.total_reps,
+    attempts: s.attempts,
   }));
   const last = points[points.length - 1];
 
@@ -112,18 +122,23 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
         </div>
         <div className={styles.tile}>
           <span className={styles.tileValue}>{stats.total_reps}</span>
-          <span className={styles.tileLabel}>Reps</span>
+          <span className={styles.tileLabel}>Counted reps</span>
+          <span className={styles.tileNote}>of {stats.attempts} attempts</span>
         </div>
         <div className={styles.tile}>
           <span className={styles.tileValue}>{stats.avg_score === null ? '—' : Math.round(stats.avg_score)}</span>
-          <span className={styles.tileLabel}>Average score</span>
+          <span className={styles.tileLabel}>Average set score</span>
+          <span className={styles.tileNote}>
+            {stats.best_session?.avg_score == null
+              ? 'missed attempts count as 0'
+              : `best ${Math.round(stats.best_session.avg_score)} · ${formatDate(stats.best_session.started_at)}`}
+          </span>
         </div>
         <div className={styles.tile}>
-          <span className={styles.tileValue}>
-            {stats.best_session?.avg_score == null ? '—' : Math.round(stats.best_session.avg_score)}
-          </span>
-          <span className={styles.tileLabel}>
-            Best set{stats.best_session ? ` · ${formatDate(stats.best_session.started_at)}` : ''}
+          <span className={`${styles.tileValue} ${stats.missed_reps ? styles.bad : ''}`}>{stats.missed_reps}</span>
+          <span className={styles.tileLabel}>Missed attempts</span>
+          <span className={styles.tileNote}>
+            {stats.attempts ? `${Math.round((stats.missed_reps / stats.attempts) * 100)}% of attempts` : '—'}
           </span>
         </div>
       </div>
@@ -131,8 +146,8 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
       <div className={styles.charts}>
         <figure className={styles.card} data-chart="score">
           <figcaption>
-            <h2>Average score per set</h2>
-            <p className={styles.sub}>Last {points.length} sets · 0–100</p>
+            <h2>Set score</h2>
+            <p className={styles.sub}>Last {points.length} sets · missed attempts count as 0</p>
           </figcaption>
           <div className={styles.chart}>
             <ResponsiveContainer width="100%" height="100%">
@@ -173,13 +188,16 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
 
         <figure className={styles.card} data-chart="reps">
           <figcaption>
-            <h2>Reps per set</h2>
+            <h2>Attempts per set</h2>
             <div className={styles.legend}>
               <span>
                 <span className={styles.key} style={{ background: SERIES_GOOD }} /> Good
               </span>
               <span>
                 <span className={styles.key} style={{ background: SERIES_OTHER }} /> Needs work
+              </span>
+              <span>
+                <span className={styles.key} style={{ background: SERIES_MISSED }} /> Missed
               </span>
             </div>
           </figcaption>
@@ -212,6 +230,16 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
                   radius={[4, 4, 0, 0]}
                   isAnimationActive={false}
                 />
+                <Bar
+                  dataKey="missed"
+                  stackId="reps"
+                  fill={SERIES_MISSED}
+                  stroke={SURFACE}
+                  strokeWidth={2}
+                  maxBarSize={24}
+                  radius={[4, 4, 0, 0]}
+                  isAnimationActive={false}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -226,8 +254,9 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
             <thead>
               <tr>
                 <th>When</th>
-                <th className={styles.num}>Reps</th>
+                <th className={styles.num}>Counted</th>
                 <th className={styles.num}>Good</th>
+                <th className={styles.num}>Missed</th>
                 <th className={styles.num}>Score</th>
                 <th className={styles.num}>Duration</th>
                 <th aria-label="Open" />
@@ -242,6 +271,7 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
                   </td>
                   <td className={styles.num}>{s.total_reps}</td>
                   <td className={styles.num}>{s.good_reps}</td>
+                  <td className={`${styles.num} ${s.missed_reps ? styles.bad : ''}`}>{s.missed_reps}</td>
                   <td className={styles.num}>{s.avg_score === null ? '—' : Math.round(s.avg_score)}</td>
                   <td className={styles.num}>{formatDuration(s.duration_ms)}</td>
                   <td className={styles.num}>
@@ -260,11 +290,12 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
           ) : (
             <ol className={styles.mistakes}>
               {stats.top_errors.map((e) => {
-                const share = stats.total_reps ? e.count / stats.total_reps : 0;
+                const share = stats.attempts ? e.count / stats.attempts : 0;
+                const known = isRepErrorCode(e.code) || isMissErrorCode(e.code);
                 return (
                   <li key={e.code}>
                     <div className={styles.mistakeRow}>
-                      <span>{isRepErrorCode(e.code) ? MISTAKE_TIPS[e.code].title : e.code}</span>
+                      <span>{known ? MISTAKE_TIPS[e.code as keyof typeof MISTAKE_TIPS].title : e.code}</span>
                       <span className={styles.mistakeCount}>
                         {e.count}× · {Math.round(share * 100)}%
                       </span>
@@ -272,7 +303,7 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
                     <span className={styles.track}>
                       <span className={styles.fill} style={{ width: `${Math.max(4, share * 100)}%` }} />
                     </span>
-                    <span className={styles.cue}>“{isRepErrorCode(e.code) ? CUE_TEXT[e.code] : e.code}”</span>
+                    <span className={styles.cue}>“{known ? CUE_TEXT[e.code as keyof typeof CUE_TEXT] : e.code}”</span>
                   </li>
                 );
               })}

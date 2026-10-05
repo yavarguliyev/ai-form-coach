@@ -1,7 +1,7 @@
 // Exercise definition contract (CLAUDE.md §8.7). Every threshold lives in the definition
 // file as a named constant; the analyzer and rep counter contain no exercise numbers.
 
-import type { ErrorCode, LiveOnlyCode, RepErrorCode } from '../errorCodes';
+import type { ErrorCode, MissErrorCode, RepErrorCode } from '../errorCodes';
 import type { PixelLandmark } from '../geometry';
 import type { RepThresholds } from '../repCounter';
 import type { RepState } from '../repCounter';
@@ -61,7 +61,9 @@ export interface ExerciseDefinition {
   /** Real-time warning mid-rep, or null. */
   liveCue?(metrics: FrameMetrics, state: RepState, limits: Limits): ErrorCode | null;
   /** Cue for a partial rep that travelled far enough (e.g. SQUAT_SHALLOW → "Go lower"). */
-  partialCue: LiveOnlyCode;
+  partialCue: MissErrorCode;
+  /** Tempo code, also stored on attempts rejected for being too quick to count. */
+  tooFastCue: RepErrorCode;
   /**
    * Called when the user turns back toward the end before returning to start
    * (e.g. re-curling without extending). Return a cue code or null.

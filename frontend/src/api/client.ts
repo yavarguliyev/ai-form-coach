@@ -1,5 +1,6 @@
 // Typed fetch wrapper for the FormCoach backend (CLAUDE.md §7).
 
+import type { MissReason } from '../engine/errorCodes';
 import type { ExerciseSlug } from '../engine/exercises/types';
 
 export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8010';
@@ -81,9 +82,19 @@ export interface Session {
   exercise_slug: ExerciseSlug;
   started_at: string;
   ended_at: string | null;
+  /** Counted reps. */
   total_reps: number;
   good_reps: number;
+  /** Attempts that didn't count (too shallow / fast / slow). */
+  missed_reps: number;
+  /** Attempts the camera lost — shown, not penalized. */
+  unseen_reps: number;
+  /** total_reps + missed_reps. */
+  attempts: number;
+  /** Set score: average over attempts, a missed attempt counts as 0. */
   avg_score: number | null;
+  /** Average of counted reps only. */
+  counted_avg_score: number | null;
   duration_ms: number | null;
 }
 
@@ -97,12 +108,15 @@ export interface Rep {
   score: number;
   errors: string[];
   metrics: Record<string, number>;
+  counted: boolean;
+  miss_reason: MissReason | null;
 }
 
 export interface SessionDetail extends Session {
   reps: Rep[];
 }
 
+/** One attempt, in attempt order. Omit counted / miss_reason for a counted rep. */
 export interface RepCreate {
   rep_index: number;
   started_at: string;
@@ -112,6 +126,8 @@ export interface RepCreate {
   score: number;
   errors: string[];
   metrics: Record<string, number>;
+  counted?: boolean;
+  miss_reason?: MissReason;
 }
 
 export interface SessionPoint {
@@ -119,6 +135,8 @@ export interface SessionPoint {
   started_at: string;
   total_reps: number;
   good_reps: number;
+  missed_reps: number;
+  attempts: number;
   avg_score: number | null;
 }
 
@@ -128,6 +146,9 @@ export interface ExerciseStats {
   total_sessions: number;
   total_reps: number;
   good_reps: number;
+  missed_reps: number;
+  attempts: number;
+  /** Over all attempts (missed = 0). */
   avg_score: number | null;
   best_session: SessionPoint | null;
   recent_sessions: SessionPoint[];

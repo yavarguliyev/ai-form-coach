@@ -265,11 +265,17 @@
   overflow: hidden;
 }
 
+/* Neutral on purpose: orange is the chart's "Missed" series. */
 .fill {
   display: block;
   height: 100%;
   border-radius: 3px;
-  background: #d95926;
+  background: #8d94a1;
+}
+
+.tileNote {
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .cue {

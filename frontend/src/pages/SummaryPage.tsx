@@ -1,7 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { ApiError, api, type SessionDetail } from '../api/client';
-import { CUE_TEXT, FORM_ERROR_CODES, isRepErrorCode, type RepErrorCode } from '../engine/errorCodes';
+import {
+  CUE_TEXT,
+  FORM_ERROR_CODES,
+  isMissErrorCode,
+  isRepErrorCode,
+  type MissErrorCode,
+  type MissReason,
+  type RepErrorCode,
+} from '../engine/errorCodes';
 import { getExercise } from '../engine/exercises';
 import { isGoodRep } from '../engine/scoring';
 import { MISTAKE_TIPS } from '../feedback/tips';
@@ -22,19 +30,31 @@ function scoreTone(score: number | null): string {
   return score >= 85 ? styles.good : score >= 70 ? styles.okish : styles.bad;
 }
 
-/** Most frequent stored error code across the reps; on a tie, form errors beat "too fast". */
-function mostCommonMistake(session: SessionDetail): { code: RepErrorCode; count: number } | null {
-  const counts = new Map<RepErrorCode, number>();
+type Code = RepErrorCode | MissErrorCode;
+const isCode = (e: string): e is Code => isRepErrorCode(e) || isMissErrorCode(e);
+
+const MISS_LABEL: Record<MissReason, string> = {
+  partial: 'Not deep enough',
+  too_short: 'Too fast to count',
+  too_long: 'Took longer than 8 s',
+  lost_tracking: 'Not seen by the camera',
+};
+
+/**
+ * Most frequent mistake over ALL attempts (counted reps and misses). On a tie, a missed rep
+ * ("not deep enough") beats a form error, which beats "too fast" — the most costly first.
+ */
+function mostCommonMistake(session: SessionDetail): { code: Code; count: number } | null {
+  const rank = (c: Code) => (isMissErrorCode(c) ? 2 : FORM_ERROR_CODES.has(c as RepErrorCode) ? 1 : 0);
+  const counts = new Map<Code, number>();
   for (const rep of session.reps) {
-    for (const e of rep.errors) if (isRepErrorCode(e)) counts.set(e, (counts.get(e) ?? 0) + 1);
+    for (const e of rep.errors) if (isCode(e)) counts.set(e, (counts.get(e) ?? 0) + 1);
   }
-  let best: { code: RepErrorCode; count: number } | null = null;
+  let best: { code: Code; count: number } | null = null;
   for (const [code, count] of counts) {
-    const beats =
-      !best ||
-      count > best.count ||
-      (count === best.count && FORM_ERROR_CODES.has(code) && !FORM_ERROR_CODES.has(best.code));
-    if (beats) best = { code, count };
+    if (!best || count > best.count || (count === best.count && rank(code) > rank(best.code))) {
+      best = { code, count };
+    }
   }
   return best;
 }
@@ -147,35 +167,54 @@ export default function SummaryPage() {
       )}
 
       <div className={styles.tiles}>
+        <div className={`${styles.tile} ${styles.tileMain}`}>
+          <span className={`${styles.tileValue} ${scoreTone(session.avg_score)}`} data-avg-score>
+            {session.avg_score === null ? '—' : Math.round(session.avg_score)}
+          </span>
+          <span className={styles.tileLabel}>Set score</span>
+          <span className={styles.tileNote}>
+            {session.counted_avg_score === null
+              ? 'Missed attempts count as 0'
+              : `Counted reps averaged ${Math.round(session.counted_avg_score)} · missed attempts count as 0`}
+          </span>
+        </div>
         <div className={styles.tile}>
           <span className={styles.tileValue} data-total-reps>
             {session.total_reps}
           </span>
-          <span className={styles.tileLabel}>Reps</span>
+          <span className={styles.tileLabel}>Counted</span>
+          <span className={styles.tileNote}>of {session.attempts} attempts</span>
         </div>
         <div className={styles.tile}>
           <span className={`${styles.tileValue} ${styles.good}`} data-good-reps>
             {session.good_reps}
           </span>
-          <span className={styles.tileLabel}>Good reps</span>
-        </div>
-        <div className={styles.tile}>
-          <span className={`${styles.tileValue} ${scoreTone(session.avg_score)}`} data-avg-score>
-            {session.avg_score === null ? '—' : Math.round(session.avg_score)}
+          <span className={styles.tileLabel}>Good</span>
+          <span className={styles.tileNote}>
+            {session.attempts ? `${Math.round((session.good_reps / session.attempts) * 100)}% effective` : '—'}
           </span>
-          <span className={styles.tileLabel}>Average score</span>
         </div>
         <div className={styles.tile}>
-          <span className={styles.tileValue}>{formatDuration(session.duration_ms)}</span>
-          <span className={styles.tileLabel}>Duration</span>
+          <span className={`${styles.tileValue} ${session.missed_reps ? styles.bad : ''}`} data-missed-reps>
+            {session.missed_reps}
+          </span>
+          <span className={styles.tileLabel}>Missed</span>
+          <span className={styles.tileNote}>{formatDuration(session.duration_ms)} set</span>
         </div>
       </div>
 
+      {session.unseen_reps > 0 && (
+        <p className={styles.notice}>
+          {session.unseen_reps} attempt{session.unseen_reps === 1 ? ' was' : 's were'} not seen by the camera — not
+          counted against you. Check your lighting and that your whole body stays in frame.
+        </p>
+      )}
+
       <div className={styles.columns}>
         <div className={styles.card}>
-          <h2>Reps</h2>
+          <h2>Every attempt</h2>
           {session.reps.length === 0 ? (
-            <p className={styles.muted}>No reps were counted in this set.</p>
+            <p className={styles.muted}>No attempts were recorded in this set.</p>
           ) : (
             <table className={styles.table} data-rep-table>
               <thead>
@@ -189,6 +228,28 @@ export default function SummaryPage() {
               </thead>
               <tbody>
                 {session.reps.map((rep) => {
+                  if (!rep.counted) {
+                    const reason = rep.miss_reason ?? 'partial';
+                    return (
+                      <tr key={rep.id} className={styles.missRow} data-miss>
+                        <td className={styles.muted}>{rep.rep_index}</td>
+                        <td>
+                          <span className={`${styles.scorePill} ${reason === 'lost_tracking' ? styles.muted : styles.bad}`}>
+                            {reason === 'lost_tracking' ? '–' : 0}
+                          </span>
+                        </td>
+                        <td>
+                          <strong className={reason === 'lost_tracking' ? styles.okish : styles.bad}>Not counted</strong>{' '}
+                          · {MISS_LABEL[reason]}
+                          {reason === 'partial' && definition && (
+                            <span className={styles.muted}> (needs {definition.thresholds.endThreshold}°)</span>
+                          )}
+                        </td>
+                        <td className={styles.num}>{Math.round(increasing ? rep.max_angle : rep.min_angle)}°</td>
+                        <td className={styles.num}>{(rep.duration_ms / 1000).toFixed(1)} s</td>
+                      </tr>
+                    );
+                  }
                   const codes = rep.errors.filter(isRepErrorCode);
                   return (
                     <tr key={rep.id}>
@@ -220,13 +281,13 @@ export default function SummaryPage() {
               <>
                 <p className={styles.mistakeTitle}>{MISTAKE_TIPS[mistake.code].title}</p>
                 <p className={styles.muted}>
-                  In {mistake.count} of {session.reps.length} rep{session.reps.length === 1 ? '' : 's'}
+                  In {mistake.count} of {session.reps.length} attempt{session.reps.length === 1 ? '' : 's'}
                 </p>
                 <p className={styles.tip}>
                   <strong>Tip:</strong> {MISTAKE_TIPS[mistake.code].tip}
                 </p>
               </>
-            ) : session.reps.length > 0 ? (
+            ) : session.reps.length > 0 && session.missed_reps === 0 ? (
               <p className={styles.good}>None — every rep was clean. Great set!</p>
             ) : (
               <p className={styles.muted}>Nothing to review yet.</p>

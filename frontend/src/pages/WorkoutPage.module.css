@@ -181,8 +181,8 @@
 
 .counters {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 .counter {
@@ -197,7 +197,7 @@
 
 /* Readable from 2–3 m away (§9). */
 .counterValue {
-  font-size: 84px;
+  font-size: 68px;
   font-weight: 850;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -205,6 +205,16 @@
 
 .good {
   color: var(--accent);
+}
+
+.missed {
+  color: var(--error);
+}
+
+.unseen {
+  margin-top: -4px;
+  color: var(--warn);
+  font-size: 12px;
 }
 
 .counterLabel {

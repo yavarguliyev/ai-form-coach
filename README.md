@@ -64,8 +64,9 @@ touches other Docker projects, and it keeps a base image (like `postgres`) if an
 2. Stand where the camera can see you — **sideways** for squats and curls, **facing the camera**
    for the shoulder press. A checklist turns green when you're in position, then a 3-2-1
    countdown starts by itself.
-3. Exercise. Reps that count show up in the big counter; mistakes and reps that don't count are
-   shown on the video. Press **Finish set** when you're done.
+3. Exercise. The counters show **Reps** (counted), **Good** and **Missed**. Mistakes and reps that
+   don't count are shown on the video and spoken. Press **Finish set** when you're done — the
+   summary lists every attempt and your set score.
 4. **History** shows your past sets, progress charts and most common mistakes per exercise.
 
 Tip: press **D** during a workout to open the debug panel (live angles and tuning sliders).
@@ -110,10 +111,16 @@ Server (FastAPI, :8010)  →  PostgreSQL database  ←  Adminer viewer (:8090)
   angles and duration.
 - **A rep only counts if it is complete.** Each exercise follows one joint angle (knee for
   squats, elbow for curls and presses). You must start in position, reach the target angle (e.g.
-  knee at 100° or lower), and come back. Half reps, wobbles, bounces and anything the camera
-  couldn't clearly see are not counted — and the app says why.
-- **Score:** 100 per rep, −30 for a form mistake (chest dropping, elbow swinging, uneven arms),
-  −15 for going too fast. A rep is "good" with a score of 70+ and no form mistake.
+  knee at 100° or lower), and come back.
+- **Every attempt is recorded, counted or not.** A half rep, a bounce that's too fast or a rep
+  that takes too long is shown and spoken ("Not counted — go lower"), listed in the summary, and
+  scores **0**. Small wobbles are ignored. If the camera loses sight of you, the attempt is shown
+  but doesn't lower your score (that's a setup problem, not your form).
+- **Rep score:** 100, −30 for a form mistake (chest dropping, elbow swinging, uneven arms), −15 for
+  going too fast. A rep is "good" with a score of 70+ and no form mistake.
+- **Set score** = the average over all attempts, with missed attempts as 0. Example: 3 clean reps
+  and 9 half reps → set score **25** (the summary also shows that the 3 counted reps averaged 100,
+  and that the set was 25% effective).
 - **Nothing is lost if the server hiccups:** reps are queued in the browser and re-sent until
   saved.
 
@@ -230,6 +237,10 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [x] T-32 README & presentation script — install guide, how it works, troubleshooting, 5-minute demo script
 - [x] T-33 Final verification — fresh clone from GitHub → `start.sh` → `make reset` → all tests → every exercise end to end → data checked in the DB
 
+### After live testing
+
+- [x] Every attempt is recorded — missed reps are shown, spoken, saved and scored 0 (set score); voice no longer cuts off mistakes
+
 ### Stretch
 
 - [ ] S-01 Rep-by-rep angle replay on the Summary page
@@ -237,6 +248,6 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [ ] S-03 Fourth exercise
 - [ ] S-04 Export session as PDF/CSV
 
-**Tests:** `make test` — 64 backend + 214 frontend (engine, sync, voice) tests, plus the error-code check.
+**Tests:** `make test` — 78 backend + 222 frontend (engine, sync, voice) tests, plus the error-code check.
 
 **Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

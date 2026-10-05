@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CUE_COOLDOWN_MS, PRAISE_TEXT, createVoicePolicy, repWord } from '../voicePolicy';
+import { CUE_COOLDOWN_MS, PRAISE_TEXT, createVoicePolicy, missText, repWord } from '../voicePolicy';
 
 const texts = (u: { text: string }[]) => u.map((x) => x.text);
 
@@ -36,10 +36,10 @@ describe('cue cooldown', () => {
 });
 
 describe('counted reps', () => {
-  it('always says the rep number, interrupting other speech', () => {
+  it('always says the rep number, queued (never cutting off a cue)', () => {
     const p = createVoicePolicy();
     const [first] = p.next({ kind: 'rep', index: 1, errors: [], atMs: 0 });
-    expect(first).toEqual({ text: 'One', interrupt: true });
+    expect(first).toEqual({ text: 'One' });
   });
 
   it('praises a clean rep at most once every 3 reps', () => {
@@ -73,5 +73,33 @@ describe('counted reps', () => {
     p.reset();
     expect(texts(p.next({ kind: 'rep', index: 1, errors: [], atMs: 10 }))).toContain(PRAISE_TEXT);
     expect(p.next({ kind: 'cue', code: 'CURL_ELBOW_SWING', atMs: 10 })).toHaveLength(1);
+  });
+});
+
+describe('missed attempts', () => {
+  it('always says why an attempt did not count', () => {
+    const p = createVoicePolicy();
+    expect(texts(p.next({ kind: 'miss', reason: 'partial', code: 'SQUAT_SHALLOW', atMs: 0 }))).toEqual([
+      'Not counted. Go lower.',
+    ]);
+    // the next miss 2 s later is spoken too — misses have no cooldown
+    expect(texts(p.next({ kind: 'miss', reason: 'partial', code: 'SQUAT_SHALLOW', atMs: 2000 }))).toEqual([
+      'Not counted. Go lower.',
+    ]);
+    expect(texts(p.next({ kind: 'miss', reason: 'too_short', code: 'SQUAT_TOO_FAST', atMs: 4000 }))).toEqual([
+      'Not counted. Too fast.',
+    ]);
+  });
+
+  it('does not repeat the same cue as a live cue right after the miss', () => {
+    const p = createVoicePolicy();
+    p.next({ kind: 'miss', reason: 'partial', code: 'CURL_PARTIAL', atMs: 0 });
+    expect(p.next({ kind: 'cue', code: 'CURL_PARTIAL', atMs: 50 })).toEqual([]);
+  });
+
+  it('has a sentence for every reason', () => {
+    expect(missText('too_long', null)).toBe('Not counted. That took too long.');
+    expect(missText('lost_tracking', null)).toBe('I lost sight of you.');
+    expect(missText('partial', 'PRESS_PARTIAL')).toBe('Not counted. Press all the way up.');
   });
 });

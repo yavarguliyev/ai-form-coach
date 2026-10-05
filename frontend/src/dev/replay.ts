@@ -28,6 +28,9 @@ export const SCENARIOS: Record<string, () => SyntheticFrame[]> = {
       },
       { noisePx: 1 },
     ),
+  // the user's example: 3 clean squats, then 9 half squats (to ~125°)
+  'squat-misses': () =>
+    generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 3), repeat(sweep(170, 125, 2000), 9), hold(170, 4000)), torsoLean: 10 }, { noisePx: 1 }),
   // endless clean squats (for long-running persistence tests)
   'squat-loop': () => generateSquat({ knee: timeline(STAND, hold(170, 3500), repeat(S_REP, 60)), torsoLean: 10 }, { noisePx: 1 }),
   'curl-clean': () => generateCurl({ elbow: timeline(STAND, hold(170, 3500), repeat(sweep(170, 35, 2000), 5), hold(170, 3000)) }, { noisePx: 1 }),

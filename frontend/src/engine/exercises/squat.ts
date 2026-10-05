@@ -77,6 +77,7 @@ export const squat: ExerciseDefinition = {
   liveCue: (metrics, _state, limits) => (metrics.torsoLean > limits[LEAN] ? 'SQUAT_TORSO_LEAN' : null),
 
   partialCue: 'SQUAT_SHALLOW',
+  tooFastCue: 'SQUAT_TOO_FAST',
 
   primaryAngleLabel: 'Knee angle',
   startHint: 'Stand up straight to start',

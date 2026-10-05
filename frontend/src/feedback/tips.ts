@@ -1,8 +1,20 @@
 // Coaching tips for the Summary page's "most common mistake" (CLAUDE.md §9).
 
-import type { RepErrorCode } from '../engine/errorCodes';
+import type { MissErrorCode, RepErrorCode } from '../engine/errorCodes';
 
-export const MISTAKE_TIPS: Record<RepErrorCode, { title: string; tip: string }> = {
+export const MISTAKE_TIPS: Record<RepErrorCode | MissErrorCode, { title: string; tip: string }> = {
+  SQUAT_SHALLOW: {
+    title: 'Not squatting deep enough',
+    tip: 'Sit down until your thighs are at least parallel to the floor (knees at about 90°). If that is hard, widen your stance a little and keep your heels down.',
+  },
+  CURL_PARTIAL: {
+    title: 'Not curling all the way up',
+    tip: 'Bring your hand all the way up to your shoulder on every rep. If you can’t, the weight is too heavy.',
+  },
+  PRESS_PARTIAL: {
+    title: 'Not pressing all the way up',
+    tip: 'Finish every press with straight arms and both hands above your head before lowering.',
+  },
   SQUAT_TORSO_LEAN: {
     title: 'Chest dropping forward',
     tip: 'Brace your core, keep your eyes straight ahead and sit your hips back as if onto a chair, so your chest stays up.',

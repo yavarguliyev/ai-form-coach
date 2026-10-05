@@ -5,7 +5,7 @@
 //
 // Pure and deterministic: time comes in as `timestampMs`; nothing reads a clock.
 
-import type { ErrorCode, RepErrorCode } from './errorCodes';
+import type { ErrorCode, MissErrorCode, MissReason, RepErrorCode } from './errorCodes';
 import { defaultLimits, type ExerciseDefinition, type FrameMetrics, type Limits, type Pose } from './exercises/types';
 import { toPixelLandmarks } from './geometry';
 import type { Landmark } from './landmarks';
@@ -22,8 +22,10 @@ import {
 } from './visibility';
 
 export interface CompletedRep {
-  /** 1-based rep number in this set. */
+  /** 1-based number among COUNTED reps (what the counter shows and the voice says). */
   index: number;
+  /** 1-based number among all attempts in this set, counted or missed (storage order). */
+  attemptIndex: number;
   /** Same clock as the timestamps passed to processFrame. */
   startedAtMs: number;
   durationMs: number;
@@ -39,6 +41,20 @@ export interface RejectedRepInfo {
   reason: RejectReason;
   /** Cue to show for this rejection (partial reps that went far enough), else null. */
   cue: ErrorCode | null;
+}
+
+/** A real attempt that was not counted — recorded and reported, never silently dropped. */
+export interface MissedAttempt {
+  attemptIndex: number;
+  reason: MissReason;
+  /** Code stored with it: "not deep enough" or "too fast"; null for too slow / not seen. */
+  code: MissErrorCode | RepErrorCode | null;
+  /** False when the camera lost sight (setup problem): shown, but doesn't lower the score. */
+  penalized: boolean;
+  startedAtMs: number;
+  durationMs: number;
+  minAngle: number;
+  maxAngle: number;
 }
 
 export interface AnalyzerOutput {
@@ -72,6 +88,12 @@ export interface AnalyzerOutput {
   completedRep?: CompletedRep;
   /** Present only on the frame a rep is rejected. */
   rejectedRep?: RejectedRepInfo;
+  /** Present only on the frame a real attempt is rejected (not on tiny wobbles). */
+  missedAttempt?: MissedAttempt;
+  /** Attempts so far that didn't count and lower the score (too shallow / fast / slow). */
+  missedCount: number;
+  /** Attempts so far lost because the camera couldn't see (not penalized). */
+  unseenCount: number;
 }
 
 export interface AnalyzerOptions {
@@ -110,6 +132,9 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
   let sideChosen = false;
   let repMetrics: FrameMetrics = {};
   let wasLost = false;
+  let attempts = 0;
+  let missedCount = 0;
+  let unseenCount = 0;
 
   const accumulate = (metrics: FrameMetrics) => {
     for (const [k, v] of Object.entries(metrics)) {
@@ -122,6 +147,9 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
     limits,
 
     reset() {
+      attempts = 0;
+      missedCount = 0;
+      unseenCount = 0;
       counter.reset();
       smoother.reset();
       tracking.reset();
@@ -178,6 +206,7 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
       let liveCue: ErrorCode | null = null;
       let completedRep: CompletedRep | undefined;
       let rejectedRep: RejectedRepInfo | undefined;
+      let missedAttempt: MissedAttempt | undefined;
 
       if (valid && out.state === 'IN_REP') {
         liveCue = definition.liveCue?.(frameMetrics, out.state, limits) ?? null;
@@ -193,8 +222,10 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
           maxAngle: out.completed.maxAngle,
           maxMetrics: { ...repMetrics },
         }, limits);
+        attempts += 1;
         completedRep = {
           index: out.repCount,
+          attemptIndex: attempts,
           startedAtMs: out.completed.startedAtMs,
           durationMs: Math.round(out.completed.durationMs),
           minAngle: round2(out.completed.minAngle),
@@ -210,10 +241,27 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
       }
 
       if (out.rejected) {
-        const cue = out.rejected.cue ? definition.partialCue : null;
-        rejectedRep = { reason: out.rejected.reason, cue };
+        const r = out.rejected;
+        const cue = r.cue ? definition.partialCue : null;
+        rejectedRep = { reason: r.reason, cue };
         if (cue) liveCue = cue;
         repMetrics = {};
+        if (r.attempt) {
+          attempts += 1;
+          const penalized = r.reason !== 'lost_tracking';
+          if (penalized) missedCount += 1;
+          else unseenCount += 1;
+          missedAttempt = {
+            attemptIndex: attempts,
+            reason: r.reason,
+            code: r.reason === 'partial' ? definition.partialCue : r.reason === 'too_short' ? definition.tooFastCue : null,
+            penalized,
+            startedAtMs: r.startedAtMs,
+            durationMs: Math.round(r.durationMs),
+            minAngle: round2(r.minAngle),
+            maxAngle: round2(r.maxAngle),
+          };
+        }
       }
 
       let positionHint: string | null = null;
@@ -237,8 +285,11 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
         orientationOk: startAllowed,
         orientationHint: orientation?.hint ?? null,
         orientationRatio: orientation?.ratio ?? null,
+        missedCount,
+        unseenCount,
         ...(completedRep && { completedRep }),
         ...(rejectedRep && { rejectedRep }),
+        ...(missedAttempt && { missedAttempt }),
       };
     },
   };

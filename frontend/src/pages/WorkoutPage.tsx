@@ -6,7 +6,7 @@ import { CameraError } from '../components/CameraError';
 import { DebugPanel, type DebugInfo, type Tuning } from '../components/DebugPanel';
 import { drawSkeleton } from '../components/skeleton';
 import { VideoCanvas } from '../components/VideoCanvas';
-import { createAnalyzer, type Analyzer, type AnalyzerOutput, type CompletedRep } from '../engine/analyzer';
+import { createAnalyzer, type Analyzer, type AnalyzerOutput, type CompletedRep, type MissedAttempt } from '../engine/analyzer';
 import { CUE_TEXT, type ErrorCode } from '../engine/errorCodes';
 import { getExercise } from '../engine/exercises';
 import { LM } from '../engine/landmarks';
@@ -35,20 +35,21 @@ type Tone = 'info' | 'ok' | 'warn' | 'error';
 
 type LogEntry =
   | { kind: 'rep'; rep: CompletedRep; good: boolean }
-  | { kind: 'rejected'; reason: RejectReason; cue: ErrorCode | null };
+  | { kind: 'missed'; miss: MissedAttempt };
 
-const REJECT_TEXT: Record<RejectReason, string> = {
-  partial: 'not counted — end position not reached',
-  too_short: 'not counted — too quick (< 600 ms)',
-  too_long: 'not counted — took longer than 8 s',
-  lost_tracking: 'not counted — lost sight of you mid-rep',
+/** Short reason shown in the rep log for an attempt that didn't count. */
+const MISS_LABEL: Record<RejectReason, string> = {
+  partial: 'Not deep enough',
+  too_short: 'Too fast to count',
+  too_long: 'Took longer than 8 s',
+  lost_tracking: 'Camera lost sight of you',
 };
 
-/** What the user is told after a rep that did NOT count. Small partial wobbles stay silent. */
-function rejectionNotice(reason: RejectReason, cue: ErrorCode | null): string | null {
+/** What the user is told after an attempt that did NOT count. */
+function rejectionNotice(reason: RejectReason, code: ErrorCode | null): string {
   switch (reason) {
     case 'partial':
-      return cue ? `Not counted — ${CUE_TEXT[cue]}` : null;
+      return `Not counted — ${code ? CUE_TEXT[code] : 'go all the way'}`;
     case 'too_short':
       return 'Not counted — too fast, slow down';
     case 'too_long':
@@ -75,10 +76,12 @@ function statusBanner(out: AnalyzerOutput | null): { text: string; tone: Tone } 
 }
 
 /** Engine rep → API payload. Engine time is performance.now()-based; convert to wall clock. */
+const clampAngle = (v: number) => (Number.isFinite(v) ? Math.min(180, Math.max(0, v)) : 0);
+
+/** Counted rep → API payload, stored in ATTEMPT order (rep_index = attempt number). */
 function toRepCreate(r: CompletedRep): RepCreate {
-  const clampAngle = (v: number) => Math.min(180, Math.max(0, v));
   return {
-    rep_index: r.index,
+    rep_index: r.attemptIndex,
     started_at: new Date(performance.timeOrigin + r.startedAtMs).toISOString(),
     duration_ms: r.durationMs,
     min_angle: clampAngle(r.minAngle),
@@ -86,6 +89,22 @@ function toRepCreate(r: CompletedRep): RepCreate {
     score: r.score,
     errors: r.errors,
     metrics: r.metrics,
+  };
+}
+
+/** Missed attempt → API payload: not counted, score 0, with the reason. */
+function toMissCreate(m: MissedAttempt): RepCreate {
+  return {
+    rep_index: m.attemptIndex,
+    started_at: new Date(performance.timeOrigin + m.startedAtMs).toISOString(),
+    duration_ms: m.durationMs,
+    min_angle: clampAngle(Math.min(m.minAngle, m.maxAngle)),
+    max_angle: clampAngle(Math.max(m.minAngle, m.maxAngle)),
+    score: 0,
+    errors: m.code ? [m.code] : [],
+    metrics: {},
+    counted: false,
+    miss_reason: m.reason,
   };
 }
 
@@ -247,7 +266,8 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
       // Reps and cues only count during the live phase; setup/countdown only check position.
       if (live) {
-        if (out.liveCue && !out.completedRep) {
+        // Rejections and counted reps have their own messages below; this is for mid-rep cues.
+        if (out.liveCue && !out.completedRep && !out.rejectedRep) {
           cueRef.current = { code: out.liveCue, atMs: now };
           noticeRef.current = { text: CUE_TEXT[out.liveCue], tone: 'error', atMs: now };
           if (!mutedRef.current) speak(voicePolicyRef.current.next({ kind: 'cue', code: out.liveCue, atMs: now }));
@@ -266,10 +286,14 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
           // Saved immediately (retried until the backend accepts it).
           syncRef.current?.enqueue(toRepCreate(r));
         }
-        if (out.rejectedRep) {
-          const text = rejectionNotice(out.rejectedRep.reason, out.rejectedRep.cue);
-          if (text) noticeRef.current = { text, tone: 'error', atMs: now };
-          logRef.current = [{ kind: 'rejected' as const, reason: out.rejectedRep.reason, cue: out.rejectedRep.cue }, ...logRef.current].slice(0, LOG_LIMIT);
+        // Every real attempt that didn't count is shown, spoken, logged and SAVED.
+        // (Tiny wobbles near the start are not attempts and stay silent.)
+        if (out.missedAttempt) {
+          const m = out.missedAttempt;
+          noticeRef.current = { text: rejectionNotice(m.reason, m.code), tone: m.penalized ? 'error' : 'warn', atMs: now };
+          if (!mutedRef.current) speak(voicePolicyRef.current.next({ kind: 'miss', reason: m.reason, code: m.code, atMs: now }));
+          logRef.current = [{ kind: 'missed' as const, miss: m }, ...logRef.current].slice(0, LOG_LIMIT);
+          syncRef.current?.enqueue(toMissCreate(m));
         }
       }
 
@@ -432,6 +456,10 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
   const goodReps = ui.goodReps;
   const inSet = phase === 'live' || phase === 'saving' || phase === 'done';
+  const inSetCount = (n: number | undefined) => (inSet ? (n ?? 0) : 0);
+  const missedCount = inSetCount(ui.out?.missedCount);
+  const unseenCount = inSetCount(ui.out?.unseenCount);
+  const increasing = definition.thresholds.direction === 'increasing';
   const repCount = inSet ? (ui.out?.repCount ?? 0) : 0;
   const sync = syncText(syncStatus, Boolean(user));
   const width = camera.status === 'ready' ? camera.width : 1280;
@@ -550,7 +578,18 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                     </span>
                     <span className={styles.counterLabel}>Good</span>
                   </div>
+                  <div className={styles.counter}>
+                    <span className={`${styles.counterValue} ${missedCount ? styles.missed : ''}`} data-missed-count>
+                      {missedCount}
+                    </span>
+                    <span className={styles.counterLabel}>Missed</span>
+                  </div>
                 </div>
+                {unseenCount > 0 && (
+                  <p className={styles.unseen}>
+                    {unseenCount} attempt{unseenCount === 1 ? '' : 's'} not seen by the camera (not counted against you)
+                  </p>
+                )}
 
                 <AngleGauge
                   angle={ui.out?.primaryAngle ?? null}
@@ -614,7 +653,7 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
 
                 <div className={`${styles.card} ${styles.logCard}`} aria-label="Rep log">
                   <h2>Rep log</h2>
-                  {ui.log.length === 0 && <p className={styles.muted}>Counted and rejected reps appear here.</p>}
+                  {ui.log.length === 0 && <p className={styles.muted}>Every attempt appears here — counted or not.</p>}
                   <ol className={styles.logList} data-rep-log>
                     {ui.log.map((e, i) =>
                       e.kind === 'rep' ? (
@@ -632,10 +671,16 @@ function Workout({ definition }: { definition: ExerciseDefinition }) {
                         </li>
                       ) : (
                         <li key={i} className={styles.logItem}>
-                          <span className={`${styles.logBadge} ${styles.badgeRejected}`}>✕</span>
+                          <span className={`${styles.logBadge} ${e.miss.penalized ? styles.badgeRejected : styles.badgeWarn}`}>✕</span>
                           <span className={styles.logBody}>
-                            <span className={styles.muted}>{REJECT_TEXT[e.reason]}</span>
-                            {e.cue && <span className={styles.logMeta}>“{CUE_TEXT[e.cue]}”</span>}
+                            <span>
+                              <strong>Not counted</strong> · {MISS_LABEL[e.miss.reason]}
+                            </span>
+                            <span className={styles.logMeta}>
+                              {e.miss.reason === 'partial' &&
+                                `reached ${Math.round(increasing ? e.miss.maxAngle : e.miss.minAngle)}°, needs ${analyzerRef.current.thresholds.endThreshold}° · `}
+                              {(e.miss.durationMs / 1000).toFixed(1)} s
+                            </span>
                           </span>
                         </li>
                       ),

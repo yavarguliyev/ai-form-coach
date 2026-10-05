@@ -99,6 +99,7 @@ export const shoulderPress: ExerciseDefinition = {
   liveCue: (m, _state, limits) => (isUneven(m, limits) ? 'PRESS_UNEVEN' : null),
 
   partialCue: 'PRESS_PARTIAL',
+  tooFastCue: 'PRESS_TOO_FAST',
 
   primaryAngleLabel: 'Elbow angle (both arms)',
   startHint: 'Bring your hands down to your shoulders to start',

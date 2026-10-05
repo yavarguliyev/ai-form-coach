@@ -80,6 +80,7 @@ export const bicepCurl: ExerciseDefinition = {
     metrics.upperArmSwing > limits[SWING] ? 'CURL_ELBOW_SWING' : null,
 
   partialCue: 'CURL_PARTIAL',
+  tooFastCue: 'CURL_TOO_FAST',
 
   reversalCue: (peakAngle, limits) => (peakAngle < limits[NO_EXT] ? 'CURL_NO_EXTENSION' : null),
 

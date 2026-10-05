@@ -11,17 +11,22 @@ export const REP_ERROR_CODES = [
   'PRESS_TOO_FAST',
 ] as const;
 
-/** Live cues only: partial / incomplete reps are never counted, so never stored. */
-export const LIVE_ONLY_CODES = [
-  'SQUAT_SHALLOW',
-  'CURL_PARTIAL',
-  'CURL_NO_EXTENSION',
-  'PRESS_PARTIAL',
-] as const;
+/**
+ * "End position not reached": stored on MISSED attempts (not counted), never on counted reps.
+ * Keep in sync with MissErrorCode in backend/app/error_codes.py.
+ */
+export const MISS_ERROR_CODES = ['SQUAT_SHALLOW', 'CURL_PARTIAL', 'PRESS_PARTIAL'] as const;
+
+/** Live cue only: never stored. */
+export const LIVE_ONLY_CODES = ['CURL_NO_EXTENSION'] as const;
 
 export type RepErrorCode = (typeof REP_ERROR_CODES)[number];
+export type MissErrorCode = (typeof MISS_ERROR_CODES)[number];
 export type LiveOnlyCode = (typeof LIVE_ONLY_CODES)[number];
-export type ErrorCode = RepErrorCode | LiveOnlyCode;
+export type ErrorCode = RepErrorCode | MissErrorCode | LiveOnlyCode;
+
+/** Why an attempt was not counted. Keep in sync with MissReason in the backend. */
+export type MissReason = 'partial' | 'too_short' | 'too_long' | 'lost_tracking';
 
 /** Form errors make a rep "not good" regardless of score. */
 export const FORM_ERROR_CODES: ReadonlySet<RepErrorCode> = new Set([
@@ -52,4 +57,8 @@ export const CUE_TEXT: Record<ErrorCode, string> = {
 
 export function isRepErrorCode(code: string): code is RepErrorCode {
   return (REP_ERROR_CODES as readonly string[]).includes(code);
+}
+
+export function isMissErrorCode(code: string): code is MissErrorCode {
+  return (MISS_ERROR_CODES as readonly string[]).includes(code);
 }

@@ -1,7 +1,7 @@
 // Decides WHAT to say and WHEN (CLAUDE.md §8.9). Pure and deterministic: time is passed in,
 // so it can be unit tested. The speech itself lives in voice.ts.
 
-import { CUE_TEXT, FORM_ERROR_CODES, type ErrorCode, type RepErrorCode } from '../engine/errorCodes';
+import { CUE_TEXT, FORM_ERROR_CODES, type ErrorCode, type MissReason, type RepErrorCode } from '../engine/errorCodes';
 
 /** The same cue code is spoken at most once per this many ms (don't nag). */
 export const CUE_COOLDOWN_MS = 3000;
@@ -22,12 +22,29 @@ export function repWord(n: number): string {
 
 export type VoiceEvent =
   | { kind: 'cue'; code: ErrorCode; atMs: number }
-  | { kind: 'rep'; index: number; errors: readonly RepErrorCode[]; atMs: number };
+  | { kind: 'rep'; index: number; errors: readonly RepErrorCode[]; atMs: number }
+  | { kind: 'miss'; reason: MissReason; code: ErrorCode | null; atMs: number };
 
+/**
+ * Utterances are queued, never interrupting each other: cutting a cue off with the next rep
+ * number is exactly how mistakes went unheard.
+ */
 export interface Utterance {
   text: string;
-  /** Interrupt whatever is being said (rep counts are time-critical). */
-  interrupt: boolean;
+}
+
+/** What is said for an attempt that did not count — always spoken (no cooldown). */
+export function missText(reason: MissReason, code: ErrorCode | null): string {
+  switch (reason) {
+    case 'partial':
+      return `Not counted. ${code ? CUE_TEXT[code] : 'Go all the way'}.`;
+    case 'too_short':
+      return 'Not counted. Too fast.';
+    case 'too_long':
+      return 'Not counted. That took too long.';
+    case 'lost_tracking':
+      return 'I lost sight of you.';
+  }
 }
 
 export interface VoicePolicy {
@@ -50,18 +67,23 @@ export function createVoicePolicy(): VoicePolicy {
   return {
     next(event) {
       if (event.kind === 'cue') {
-        return cueAllowed(event.code, event.atMs) ? [{ text: CUE_TEXT[event.code], interrupt: false }] : [];
+        return cueAllowed(event.code, event.atMs) ? [{ text: CUE_TEXT[event.code] }] : [];
+      }
+      if (event.kind === 'miss') {
+        // Mark the code as just heard so it isn't repeated as a live cue right after.
+        if (event.code) lastSpokenAt.set(event.code, event.atMs);
+        return [{ text: missText(event.reason, event.code) }];
       }
 
       // Counted rep: always say the number. Then its mistake (same cooldown as live cues,
       // so a cue already heard mid-rep isn't repeated), or occasional praise for a clean rep.
-      const out: Utterance[] = [{ text: repWord(event.index), interrupt: true }];
+      const out: Utterance[] = [{ text: repWord(event.index) }];
       const mistake = event.errors.find((e) => FORM_ERROR_CODES.has(e)) ?? event.errors[0];
       if (mistake) {
-        if (cueAllowed(mistake, event.atMs)) out.push({ text: CUE_TEXT[mistake], interrupt: false });
+        if (cueAllowed(mistake, event.atMs)) out.push({ text: CUE_TEXT[mistake] });
       } else if (lastPraiseRep === null || event.index - lastPraiseRep >= PRAISE_EVERY_N_REPS) {
         lastPraiseRep = event.index;
-        out.push({ text: PRAISE_TEXT, interrupt: false });
+        out.push({ text: PRAISE_TEXT });
       }
       return out;
     },

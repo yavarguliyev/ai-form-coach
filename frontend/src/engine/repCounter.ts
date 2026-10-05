@@ -13,6 +13,11 @@ export const MIN_REP_MS = 600;
 export const MAX_REP_MS = 8000;
 /** A partial rep only triggers a cue ("Go lower") if it travelled at least this far. */
 export const PARTIAL_CUE_MIN_TRAVEL = 25;
+/**
+ * A rejected rep is a real ATTEMPT (recorded, shown and scored as missed) only if it moved at
+ * least this far from the start position. Smaller movements are wobbles and are ignored.
+ */
+export const ATTEMPT_MIN_TRAVEL = PARTIAL_CUE_MIN_TRAVEL;
 /** After the end is reached, moving back toward the end by this much = re-started mid-way. */
 export const REVERSAL_DEG = 15;
 
@@ -66,10 +71,15 @@ export type RejectReason = 'partial' | 'too_short' | 'too_long' | 'lost_tracking
 
 export interface RejectedRep {
   reason: RejectReason;
+  startedAtMs: number;
   durationMs: number;
+  minAngle: number;
+  maxAngle: number;
   /** Degrees travelled from the start threshold toward the end. */
   travel: number;
-  /** Whether this rejection deserves user feedback (partial reps that went far enough). */
+  /** A real attempt (moved at least ATTEMPT_MIN_TRAVEL), not a wobble — record it as missed. */
+  attempt: boolean;
+  /** Whether this rejection deserves the partial cue ("Go lower"). */
   cue: boolean;
 }
 
@@ -175,8 +185,12 @@ export function createRepCounter(config: RepCounterConfig): RepCounter {
     const t = travel();
     const rejected: RejectedRep = {
       reason,
+      startedAtMs: rep?.startedAtMs ?? now,
       durationMs,
+      minAngle: rep?.minAngle ?? Number.NaN,
+      maxAngle: rep?.maxAngle ?? Number.NaN,
       travel: t,
+      attempt: rep !== null && t >= partialCueMinTravel,
       cue: reason === 'partial' && t >= partialCueMinTravel,
     };
     rep = null;

@@ -24,6 +24,14 @@ if frontend != backend:
         f"check-codes: MISMATCH\n  only in frontend: {sorted(frontend - backend)}\n"
         f"  only in backend:  {sorted(backend - frontend)}"
     )
+# Codes stored on MISSED attempts ("end position not reached").
+ts_miss = re.search(r"MISS_ERROR_CODES = \[(.*?)\] as const", ts, re.S)
+py_miss = re.search(r"MissErrorCode = Literal\[(.*?)\]", py, re.S)
+if not ts_miss or not py_miss:
+    sys.exit("check-codes: could not find the miss code lists")
+if set(re.findall(r"'([A-Z_]+)'", ts_miss.group(1))) != set(re.findall(r'"([A-Z_]+)"', py_miss.group(1))):
+    sys.exit("check-codes: MISS codes differ between frontend and backend")
+
 # The "good rep" rule (score >= 70 and no form errors) must classify codes the same way.
 ts_form = re.search(r"FORM_ERROR_CODES: ReadonlySet<RepErrorCode> = new Set\(\[(.*?)\]\)", ts, re.S)
 py_form = re.search(r"FORM_ERROR_CODES: frozenset\[str\] = frozenset\(\s*\{(.*?)\}", py, re.S)
@@ -37,6 +45,6 @@ if ts_min.group(1) != py_min.group(1):
     sys.exit(f"check-codes: GOOD_REP_MIN_SCORE differs ({ts_min.group(1)} vs {py_min.group(1)})")
 
 print(
-    f"check-codes: frontend and backend agree on {len(frontend)} rep error codes, "
+    f"check-codes: frontend and backend agree on {len(frontend)} rep error codes, miss codes, "
     f"form errors and GOOD_REP_MIN_SCORE={ts_min.group(1)}"
 )

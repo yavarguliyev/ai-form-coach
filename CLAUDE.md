@@ -375,7 +375,9 @@ Rep is **rejected (not counted)** if:
   ("Go lower" etc.) only if the rep went at least `PARTIAL_CUE_MIN_TRAVEL` (constant, default 25°)
   past the start threshold — small wobbles near the top are rejected silently, never nagged.
 
-Rep durations > 8 s (`MAX_REP_MS`) → discard and reset to TOP.
+Rep durations > 8 s (`MAX_REP_MS`) → discard and go to READY (the user must hold the start position
+again). Not straight to TOP: someone stuck at the bottom would immediately start a new "rep" from
+there and could get half a rep counted.
 
 Implement the machine so "direction" is configurable: for squats the angle goes DOWN during the
 rep, for shoulder press it goes UP. Exercise definitions declare this.
@@ -628,7 +630,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 - [x] **T-14 Geometry + pixel conversion** (§8.2, §8.3) with tests.
 - [x] **T-15 Smoothing + visibility gate + side selection** (§8.4, §8.5) with tests.
-- [ ] **T-16 Generic rep state machine** (§8.6) supporting both directions, min/max rep time, partial-rep rejection, with tests.
+- [x] **T-16 Generic rep state machine** (§8.6) supporting both directions, min/max rep time, partial-rep rejection, with tests.
 - [ ] **T-17 Scoring** (§8.8) with tests.
 - [ ] **T-18 Synthetic data generator** — test utility producing landmark sequences for given angle curves, frame rate, noise, and visibility drops.
 - [ ] **T-19 Analyzer** (§8.10) wiring everything together.

@@ -593,7 +593,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 
 - [x] **T-01 Repo scaffold** — Create the folder layout from §4, `.gitignore`, `.env.example`, `Makefile` (including `check-ports`), minimal `README.md`.
       _AC:_ structure matches §4; `make` targets exist; `make check-ports` reports the 4 ports.
-- [ ] **T-02 docker-compose** — Services `db`, `backend`, `frontend`, `adminer` per §5 with healthchecks, project name `formcoach`, `fc_` container names, own network and volume, ports from `.env`.
+- [x] **T-02 docker-compose** — Services `db`, `backend`, `frontend`, `adminer` per §5 with healthchecks, project name `formcoach`, `fc_` container names, own network and volume, ports from `.env`.
       _AC:_ `make up` starts all 4 on ports 5180/8010/55432/8090 only; `docker ps` shows no other port used by `fc_*` containers; the existing `ddd_*` containers are untouched and still running; Adminer can log in to the DB.
 - [ ] **T-03 Backend skeleton** — FastAPI app, config, DB session, CORS, `/api/health` checking DB.
       _AC:_ `GET /api/health` → `{status:"ok", db:"ok"}`; `/docs` loads.

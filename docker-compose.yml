@@ -1,0 +1,90 @@
+name: formcoach
+
+# Host ports come from .env (see CLAUDE.md §5.1). Ports bind to 127.0.0.1 only.
+# Inside fc_net, services talk via service names (db:5432, backend:8010).
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fc_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-formcoach}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-formcoach}
+      POSTGRES_DB: ${POSTGRES_DB:-formcoach}
+    ports:
+      - "127.0.0.1:${DB_HOST_PORT:-55432}:5432"
+    volumes:
+      - fc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [fc_net]
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: fc_backend
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://formcoach:formcoach@db:5432/formcoach}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5180}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8010}:8010"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/api/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [fc_net]
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: fc_frontend
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8010}
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5180}:5180"
+    volumes:
+      - ./frontend:/app
+      # Anonymous volume so the bind mount above doesn't hide the image's node_modules.
+      - /app/node_modules
+    depends_on:
+      - backend
+    healthcheck:
+      # 127.0.0.1, not localhost: on alpine localhost resolves to ::1 and Vite listens on IPv4.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5180/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 15s
+    networks: [fc_net]
+    restart: unless-stopped
+
+  adminer:
+    image: adminer
+    container_name: fc_adminer
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8090}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [fc_net]
+    restart: unless-stopped
+
+networks:
+  fc_net:
+    name: fc_net
+
+volumes:
+  fc_pgdata:
+    name: fc_pgdata

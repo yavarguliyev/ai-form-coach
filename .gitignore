@@ -1,0 +1,25 @@
+# env
+.env
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# node
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# mediapipe assets (fetched at container start, see CLAUDE.md §9)
+frontend/public/models/*.task
+frontend/public/wasm/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/

@@ -90,8 +90,7 @@ Tip: press **D** during a workout to open the debug panel (live angles and tunin
 
 ## For developers
 
-The full spec, architecture and backlog live in [CLAUDE.md](CLAUDE.md). The `Makefile` wraps the
-same Docker commands for day-to-day work:
+The `Makefile` wraps the same Docker commands for day-to-day work:
 
 ```bash
 make up          # check ports, build and start (detached)
@@ -107,7 +106,7 @@ Ports and passwords are configured in `.env` (created from `.env.example`). Host
 
 ## Progress
 
-Mirrors the backlog in [CLAUDE.md §13](CLAUDE.md). Updated after every ticket.
+The project is built ticket by ticket; this list is updated after every ticket.
 
 ### Milestone 0 — Project skeleton & infrastructure ✅
 

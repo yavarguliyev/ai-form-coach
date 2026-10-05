@@ -1,5 +1,9 @@
-# env
+# env (local settings; .env.example is the committed template)
 .env
+
+# local AI-assistant spec, kept out of the public repo
+CLAUDE.md
+.claude/
 
 # python
 __pycache__/
@@ -15,7 +19,7 @@ dist/
 *.tsbuildinfo
 .vite/
 
-# mediapipe assets (fetched at container start, see CLAUDE.md §9)
+# mediapipe assets (fetched at container start by frontend/scripts/fetch-model.sh)
 frontend/public/models/*.task
 frontend/public/wasm/
 

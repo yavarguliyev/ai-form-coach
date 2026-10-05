@@ -1,5 +1,5 @@
 # FormCoach AI — all commands are scoped to the `formcoach` compose project only.
-# Never add prune / global docker commands here (see CLAUDE.md §5.2).
+# Never add prune / global docker commands here: other Docker projects run on this machine.
 
 SHELL := /bin/bash
 
@@ -49,7 +49,7 @@ check-ports:
 	done; \
 	if [ $$busy -ne 0 ]; then \
 		echo ""; \
-		echo "ERROR: a required port is busy. Pick a new free port (not on the forbidden list in CLAUDE.md §5.1),"; \
+		echo "ERROR: a required port is busy. Pick a new free port (one no other program uses),"; \
 		echo "set it in .env, and try again."; \
 		exit 1; \
 	fi; \

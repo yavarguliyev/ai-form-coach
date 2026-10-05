@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, type User } from '../api/client';
+import { useBackend } from './BackendContext';
 
 // Remembered per browser so the demo opens with the last user selected (convenience only).
 const STORAGE_KEY = 'formcoach.userId';
@@ -55,9 +56,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const { reconnects } = useBackend();
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, reconnects]);
 
   useEffect(() => writeStoredId(selectedId), [selectedId]);
 

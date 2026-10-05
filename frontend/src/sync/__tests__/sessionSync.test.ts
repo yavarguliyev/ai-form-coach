@@ -187,3 +187,12 @@ describe('createSessionSync', () => {
     expect(seen).toContain(1);
   });
 });
+
+describe('isRetryable with the real client errors', () => {
+  it('retries NetworkError (server unreachable) and 5xx ApiError, not 4xx', async () => {
+    const { ApiError, NetworkError } = await import('../../api/client');
+    expect(isRetryable(new NetworkError(new TypeError('Failed to fetch')))).toBe(true);
+    expect(isRetryable(new ApiError(503, null))).toBe(true);
+    expect(isRetryable(new ApiError(422, null))).toBe(false);
+  });
+});

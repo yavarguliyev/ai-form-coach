@@ -160,7 +160,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 ### Milestone 6 — History & polish
 
 - [x] T-29 History page — exercise tabs, stat tiles, score line + reps-per-set charts (Recharts), sets table, top mistakes
-- [ ] T-30 Visual polish
+- [x] T-30 Visual polish — fits the screen while exercising, one friendly "server unreachable" notice that recovers by itself, 404 page, page titles, favicon
 - [x] T-31 Demo data — `make demo-data` / `bash infra/demo-data.sh` (tagged example sets; real ones untouched)
 - [ ] T-32 README & presentation script
 - [ ] T-33 Final verification from a fresh clone
@@ -172,6 +172,6 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [ ] S-03 Fourth exercise
 - [ ] S-04 Export session as PDF/CSV
 
-**Tests:** `make test` — 64 backend + 213 frontend (engine, sync, voice) tests, plus the error-code check.
+**Tests:** `make test` — 64 backend + 214 frontend (engine, sync, voice) tests, plus the error-code check.
 
 **Tooling:** `infra/start.sh`, `infra/restart.sh`, `infra/remove.sh` — one-command setup for non-developers.

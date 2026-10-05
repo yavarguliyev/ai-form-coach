@@ -19,6 +19,8 @@ import { readMuted, speak, speechAvailable, stopSpeaking, writeMuted } from '../
 import { createVoicePolicy } from '../feedback/voicePolicy';
 import { useUser } from '../state/UserContext';
 import { FinishTimeoutError, createSessionSync, type SessionSync, type SyncStatus } from '../sync/sessionSync';
+import { useTitle } from '../useTitle';
+import NotFoundPage from './NotFoundPage';
 import styles from './WorkoutPage.module.css';
 
 const UI_REFRESH_MS = 250; // per-frame data reaches React at 4 Hz, never per frame (§14)
@@ -115,11 +117,10 @@ export default function WorkoutPage() {
   const definition = getExercise(exerciseSlug);
   if (!definition) {
     return (
-      <section>
-        <h1>Unknown exercise</h1>
-        <p>“{exerciseSlug}” is not one of the supported exercises.</p>
-        <Link to="/">Back to exercises</Link>
-      </section>
+      <NotFoundPage
+        title="Unknown exercise"
+        message={`“${exerciseSlug}” is not one of the supported exercises (squat, bicep curl, shoulder press).`}
+      />
     );
   }
   return <Workout key={definition.slug} definition={definition} />;
@@ -129,6 +130,7 @@ export default function WorkoutPage() {
 const REPLAY = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('replay') : null;
 
 function Workout({ definition }: { definition: ExerciseDefinition }) {
+  useTitle(definition.name);
   const { videoRef, state: realCamera, retry } = useCamera(!REPLAY);
   const camera = REPLAY ? ({ status: 'ready', width: 1280, height: 720 } as const) : realCamera;
   const canvasRef = useRef<HTMLCanvasElement>(null);

@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { ApiError, api, type Exercise } from '../api/client';
+import { OfflineNotice } from '../components/OfflineNotice';
+import { useTitle } from '../useTitle';
+import { useBackend } from '../state/BackendContext';
 import { useUser } from '../state/UserContext';
 import styles from './HomePage.module.css';
 
@@ -33,6 +36,7 @@ function CameraViewIcon({ view }: { view: Exercise['camera_view'] }) {
 
 function UserCard() {
   const { users, user, loading, error, selectUser, createUser, reload } = useUser();
+  const { status } = useBackend();
   const [name, setName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -59,7 +63,8 @@ function UserCard() {
     }
   };
 
-  if (error) {
+  // While the server is unreachable the page-level OfflineNotice explains it once.
+  if (error && status === 'connected') {
     return (
       <div className={styles.userCard} role="alert">
         <p className={styles.error}>Couldn't load users: {error}</p>
@@ -81,7 +86,9 @@ function UserCard() {
           data-user-select
         >
           {loading && <option value="">Loading…</option>}
-          {!loading && users.length === 0 && <option value="">No users yet</option>}
+          {!loading && users.length === 0 && (
+            <option value="">{status === 'connected' ? 'No users yet' : 'Waiting for server…'}</option>
+          )}
           {users.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
@@ -109,7 +116,9 @@ function UserCard() {
 }
 
 export default function HomePage() {
+  useTitle('Exercises');
   const { user } = useUser();
+  const { status, reconnects } = useBackend();
   const [exercises, setExercises] = useState<Exercise[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -124,7 +133,7 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, reconnects]);
 
   return (
     <section className={styles.page}>
@@ -139,7 +148,8 @@ export default function HomePage() {
         <UserCard />
       </div>
 
-      {error && (
+      <OfflineNotice />
+      {error && status === 'connected' && (
         <div className={styles.notice} role="alert">
           <p className={styles.error}>Couldn't load exercises: {error}</p>
           <button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>
@@ -147,7 +157,7 @@ export default function HomePage() {
           </button>
         </div>
       )}
-      {!exercises && !error && <p className={styles.muted}>Loading exercises…</p>}
+      {!exercises && !error && status !== 'offline' && <p className={styles.muted}>Loading exercises…</p>}
 
       <div className={styles.cards}>
         {exercises?.map((ex) => (

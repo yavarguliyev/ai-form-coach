@@ -5,7 +5,10 @@ import { CUE_TEXT, FORM_ERROR_CODES, isRepErrorCode, type RepErrorCode } from '.
 import { getExercise } from '../engine/exercises';
 import { isGoodRep } from '../engine/scoring';
 import { MISTAKE_TIPS } from '../feedback/tips';
+import { OfflineNotice } from '../components/OfflineNotice';
 import { formatDuration } from '../format';
+import { useBackend } from '../state/BackendContext';
+import { useTitle } from '../useTitle';
 import styles from './SummaryPage.module.css';
 
 type Load =
@@ -42,6 +45,9 @@ export default function SummaryPage() {
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const [deleting, setDeleting] = useState(false);
+  const { reconnects } = useBackend();
+  const title = load.status === 'ready' ? `${getExercise(load.session.exercise_slug)?.name ?? 'Set'} summary` : 'Summary';
+  useTitle(title);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +63,7 @@ export default function SummaryPage() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId, attempt]);
+  }, [sessionId, attempt, reconnects]);
 
   const mistake = useMemo(() => (load.status === 'ready' ? mostCommonMistake(load.session) : null), [load]);
 
@@ -85,6 +91,7 @@ export default function SummaryPage() {
     return (
       <section className={styles.page}>
         <h1>Couldn't load the results</h1>
+        <OfflineNotice />
         <div className={styles.empty}>
           <p className={styles.errorText}>{load.message}</p>
           <button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>

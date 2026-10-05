@@ -23,16 +23,31 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The server could not be reached (not running, starting up, network down). Deliberately has no
+ * `status`: the rep save queue retries errors without a status (see sync/sessionSync.ts).
+ */
+export class NetworkError extends Error {
+  constructor(readonly cause: unknown) {
+    super("Can't reach the FormCoach server");
+  }
+}
+
 type RequestOptions = Omit<RequestInit, 'body'> & { timeoutMs?: number; body?: unknown };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { timeoutMs = 5000, body, ...rest } = options;
-  const res = await fetch(`${API_URL}${path}`, {
-    ...rest,
-    headers: { 'Content-Type': 'application/json', ...rest.headers },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: rest.signal ?? AbortSignal.timeout(timeoutMs),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      ...rest,
+      headers: { 'Content-Type': 'application/json', ...rest.headers },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: rest.signal ?? AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    throw new NetworkError(err);
+  }
   const data: unknown = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw new ApiError(res.status, data);
   return data as T;

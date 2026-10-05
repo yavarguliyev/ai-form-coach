@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import WorkoutPage from './pages/WorkoutPage';
 import SummaryPage from './pages/SummaryPage';
 import HistoryPage from './pages/HistoryPage';
+import NotFoundPage from './pages/NotFoundPage';
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="workout/:exerciseSlug" element={<WorkoutPage />} />
           <Route path="sessions/:sessionId" element={<SummaryPage />} />
           <Route path="history" element={<HistoryPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

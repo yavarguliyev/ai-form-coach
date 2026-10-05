@@ -17,7 +17,10 @@ import { CUE_TEXT, isRepErrorCode } from '../engine/errorCodes';
 import type { ExerciseSlug } from '../engine/exercises/types';
 import { MISTAKE_TIPS } from '../feedback/tips';
 import { formatDate, formatDateTime, formatDuration } from '../format';
+import { OfflineNotice } from '../components/OfflineNotice';
+import { useBackend } from '../state/BackendContext';
 import { useUser } from '../state/UserContext';
+import { useTitle } from '../useTitle';
 import styles from './HistoryPage.module.css';
 
 // Chart colours: validated with the dataviz palette validator against the dark surface
@@ -282,7 +285,9 @@ function ExerciseHistory({ stats, sessions }: { stats: ExerciseStats; sessions: 
 }
 
 export default function HistoryPage() {
+  useTitle('History');
   const { user, loading: usersLoading } = useUser();
+  const { status, reconnects } = useBackend();
   const [slug, setSlug] = useState<ExerciseSlug>('squat');
   const [load, setLoad] = useState<Load>({ status: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -297,7 +302,7 @@ export default function HistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, attempt]);
+  }, [user, attempt, reconnects]);
 
   const byExercise = useMemo(() => {
     if (load.status !== 'ready') return null;
@@ -308,7 +313,8 @@ export default function HistoryPage() {
     return (
       <section className={styles.page}>
         <h1 className={styles.title}>History</h1>
-        <div className={styles.empty}>
+        <OfflineNotice />
+        <div className={styles.empty} hidden={status === 'offline' || status === 'db-error'}>
           <p>{usersLoading ? 'Loading…' : 'Choose who is training first.'}</p>
           {!usersLoading && (
             <Link className="btn btn-secondary" to="/">
@@ -351,8 +357,9 @@ export default function HistoryPage() {
         </div>
       </div>
 
-      {load.status === 'loading' && <p className={styles.sub}>Loading history…</p>}
-      {load.status === 'error' && (
+      <OfflineNotice />
+      {load.status === 'loading' && status !== 'offline' && <p className={styles.sub}>Loading history…</p>}
+      {load.status === 'error' && status === 'connected' && (
         <div className={styles.empty} role="alert">
           <p className={styles.bad}>Couldn't load history: {load.message}</p>
           <button type="button" className="btn btn-secondary" onClick={() => setAttempt((n) => n + 1)}>

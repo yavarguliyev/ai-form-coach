@@ -6,7 +6,7 @@
 // Pure and deterministic: time comes in as `timestampMs`; nothing reads a clock.
 
 import type { ErrorCode, RepErrorCode } from './errorCodes';
-import type { FrameMetrics, ExerciseDefinition, Pose } from './exercises/types';
+import { defaultLimits, type ExerciseDefinition, type FrameMetrics, type Limits, type Pose } from './exercises/types';
 import { toPixelLandmarks } from './geometry';
 import type { Landmark } from './landmarks';
 import { createRepCounter, type RejectReason, type RepState, type RepThresholds } from './repCounter';
@@ -61,8 +61,10 @@ export interface AnalyzerOutput {
 }
 
 export interface AnalyzerOptions {
-  /** Override the definition's thresholds (debug-panel tuning). */
+  /** Override the definition's rep thresholds (debug-panel tuning). */
   thresholds?: Partial<RepThresholds>;
+  /** Override form-error limits by key (debug-panel tuning). */
+  limits?: Partial<Record<string, number>>;
 }
 
 export interface Analyzer {
@@ -74,12 +76,14 @@ export interface Analyzer {
   ): AnalyzerOutput;
   reset(): void;
   readonly thresholds: RepThresholds;
+  readonly limits: Limits;
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
 export function createAnalyzer(definition: ExerciseDefinition, options: AnalyzerOptions = {}): Analyzer {
   const thresholds: RepThresholds = { ...definition.thresholds, ...options.thresholds };
+  const limits: Limits = { ...defaultLimits(definition), ...options.limits } as Limits;
   const counter = createRepCounter(thresholds);
   const smoother = createLandmarkSmoother();
   const tracking = createTrackingMonitor();
@@ -101,6 +105,7 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
 
   return {
     thresholds,
+    limits,
 
     reset() {
       counter.reset();
@@ -151,10 +156,10 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
       let rejectedRep: RejectedRepInfo | undefined;
 
       if (valid && out.state === 'IN_REP') {
-        liveCue = definition.liveCue?.(frameMetrics, out.state) ?? null;
+        liveCue = definition.liveCue?.(frameMetrics, out.state, limits) ?? null;
       }
       if (out.reversal) {
-        liveCue = definition.reversalCue?.(out.reversal.peakAngle) ?? liveCue;
+        liveCue = definition.reversalCue?.(out.reversal.peakAngle, limits) ?? liveCue;
       }
 
       if (out.completed) {
@@ -163,7 +168,7 @@ export function createAnalyzer(definition: ExerciseDefinition, options: Analyzer
           minAngle: out.completed.minAngle,
           maxAngle: out.completed.maxAngle,
           maxMetrics: { ...repMetrics },
-        });
+        }, limits);
         completedRep = {
           index: out.repCount,
           startedAtMs: out.completed.startedAtMs,

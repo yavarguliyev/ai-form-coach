@@ -83,3 +83,55 @@
   margin: 12px 0 0;
   font-size: 11px;
 }
+
+.big {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lowText {
+  color: var(--error);
+}
+
+.slider {
+  display: block;
+  margin: 6px 0;
+}
+
+.sliderLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.slider input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.value {
+  color: var(--text-muted);
+}
+
+.changed {
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.error {
+  color: var(--error);
+  font-size: 12px;
+  margin: 6px 0;
+}
+
+.resetBtn {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}

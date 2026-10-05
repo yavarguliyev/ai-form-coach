@@ -1,4 +1,139 @@
+.page h1 {
+  margin: 0 0 4px;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.instructions {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 640px;
+}
+
+.counters {
+  display: flex;
+  gap: 32px;
+}
+
+.counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Readable from 2–3 m away (§9). */
+.counterValue {
+  font-size: 88px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.good {
+  color: var(--accent);
+}
+
+.counterLabel {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 14px;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.videoCol {
+  min-width: 0;
+}
+
+.banner {
+  margin-top: 12px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 26px;
+  font-weight: 700;
+  min-height: 64px;
+}
+
+.cueBanner {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.warnBanner {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
 .meta {
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.log {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.logHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logHeader h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.logHeader button {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.logList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.logList li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.logGood strong {
+  color: var(--accent);
+}
+
+.logBad strong {
+  color: var(--warn);
+}
+
+.logRejected {
+  color: var(--text-muted);
+}
+
+.muted {
+  color: var(--text-muted);
 }

@@ -6,6 +6,10 @@ import { LM } from '../landmarks';
 import type { Side } from '../visibility';
 import type { ExerciseDefinition } from './types';
 
+const SWING = 'maxElbowSwing';
+const FAST = 'tooFastMs';
+const NO_EXT = 'noExtensionAngle';
+
 /** Elbow angle at or above this = arm extended (start position). */
 export const CURL_START_ANGLE = 150;
 /** Elbow angle below this = the curl has begun (15° hysteresis gap). */
@@ -59,18 +63,25 @@ export const bicepCurl: ExerciseDefinition = {
     return { upperArmSwing: angleAt(pose[c.elbow], pose[c.shoulder], pose[c.hip]) };
   },
 
-  evaluateRep(rep) {
+  limits: [
+    { key: SWING, label: 'Max elbow swing', default: CURL_MAX_ELBOW_SWING, min: 10, max: 60, step: 1, unit: '°' },
+    { key: FAST, label: 'Too fast below', default: CURL_TOO_FAST_MS, min: 600, max: 2000, step: 50, unit: 'ms' },
+    { key: NO_EXT, label: 'No-extension below', default: CURL_NO_EXTENSION_ANGLE, min: 100, max: 160, step: 1, unit: '°' },
+  ],
+
+  evaluateRep(rep, limits) {
     const errors: RepErrorCode[] = [];
-    if (rep.maxMetrics.upperArmSwing > CURL_MAX_ELBOW_SWING) errors.push('CURL_ELBOW_SWING');
-    if (rep.durationMs < CURL_TOO_FAST_MS) errors.push('CURL_TOO_FAST');
+    if (rep.maxMetrics.upperArmSwing > limits[SWING]) errors.push('CURL_ELBOW_SWING');
+    if (rep.durationMs < limits[FAST]) errors.push('CURL_TOO_FAST');
     return errors;
   },
 
-  liveCue: (metrics) => (metrics.upperArmSwing > CURL_MAX_ELBOW_SWING ? 'CURL_ELBOW_SWING' : null),
+  liveCue: (metrics, _state, limits) =>
+    metrics.upperArmSwing > limits[SWING] ? 'CURL_ELBOW_SWING' : null,
 
   partialCue: 'CURL_PARTIAL',
 
-  reversalCue: (peakAngle) => (peakAngle < CURL_NO_EXTENSION_ANGLE ? 'CURL_NO_EXTENSION' : null),
+  reversalCue: (peakAngle, limits) => (peakAngle < limits[NO_EXT] ? 'CURL_NO_EXTENSION' : null),
 
   setupInstructions:
     'Stand sideways to the camera with your working arm closest to it. Keep your whole upper body and hips in frame.',

@@ -1,62 +1,180 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router';
 import { CameraError } from '../components/CameraError';
-import { DebugPanel, type DebugInfo } from '../components/DebugPanel';
+import { DebugPanel, type DebugInfo, type Tuning } from '../components/DebugPanel';
 import { drawSkeleton } from '../components/skeleton';
 import { VideoCanvas } from '../components/VideoCanvas';
-import { LM } from '../engine/landmarks';
+import { createAnalyzer, type Analyzer, type AnalyzerOutput } from '../engine/analyzer';
+import { CUE_TEXT, type ErrorCode } from '../engine/errorCodes';
+import { getExercise } from '../engine/exercises';
+import { defaultLimits, type ExerciseDefinition } from '../engine/exercises/types';
+import { validateThresholds, type RejectReason, type RepState } from '../engine/repCounter';
+import { isGoodRep } from '../engine/scoring';
 import { useCamera } from '../pose/useCamera';
 import { usePoseLandmarker, type PoseFrame } from '../pose/usePoseLandmarker';
 import styles from './WorkoutPage.module.css';
 
-const UI_REFRESH_MS = 250; // per-frame numbers reach React at 4 Hz, never per frame (§14)
-const LOG_EVERY_MS = 1000;
+const UI_REFRESH_MS = 250; // per-frame data reaches React at 4 Hz, never per frame (§14)
+const CUE_VISIBLE_MS = 2500; // §8.9
+const LOG_LIMIT = 12;
 
-// Joints highlighted per exercise. Both sides for now; the engine picks one side (T-15) and
-// the exercise definitions (T-20..22) will provide this list.
-const ACTIVE_JOINTS: Record<string, ReadonlySet<number>> = {
-  squat: new Set([LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_KNEE, LM.RIGHT_KNEE, LM.LEFT_ANKLE, LM.RIGHT_ANKLE]),
-  bicep_curl: new Set([LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_ELBOW, LM.RIGHT_ELBOW, LM.LEFT_WRIST, LM.RIGHT_WRIST, LM.LEFT_HIP, LM.RIGHT_HIP]),
-  shoulder_press: new Set([LM.NOSE, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, LM.LEFT_ELBOW, LM.RIGHT_ELBOW, LM.LEFT_WRIST, LM.RIGHT_WRIST]),
+type LogEntry =
+  | { kind: 'rep'; index: number; score: number; errors: string[]; minAngle: number; maxAngle: number; durationMs: number; good: boolean }
+  | { kind: 'rejected'; reason: RejectReason; cue: ErrorCode | null };
+
+const REJECT_TEXT: Record<RejectReason, string> = {
+  partial: 'not counted — end position not reached',
+  too_short: 'not counted — too quick (< 600 ms)',
+  too_long: 'not counted — took longer than 8 s',
+  lost_tracking: 'not counted — lost sight of you mid-rep',
 };
-const NO_JOINTS: ReadonlySet<number> = new Set();
 
-function isTyping(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+function statusText(out: AnalyzerOutput | null): string {
+  if (!out) return 'Starting…';
+  const s: Record<RepState, string> = {
+    NOT_VISIBLE: out.visibilityMessage ?? "I can't see you — step into the camera view",
+    READY: out.visibilityOk ? 'Hold the start position…' : (out.visibilityMessage ?? ''),
+    TOP: 'Ready — go!',
+    IN_REP: 'Keep going',
+  };
+  return s[out.state];
 }
 
-// Camera + pose + overlay for now; the workout flow (T-25) builds on it.
+function initialTuning(def: ExerciseDefinition): Tuning {
+  return { thresholds: { ...def.thresholds }, limits: defaultLimits(def) };
+}
+
+function isTyping(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) &&
+    !(target instanceof HTMLInputElement && target.type === 'range')
+  );
+}
+
+// Live engine on the camera feed. The full workout flow (setup, countdown, saving) is T-25/T-26.
 export default function WorkoutPage() {
   const { exerciseSlug = '' } = useParams();
-  const activeJoints = ACTIVE_JOINTS[exerciseSlug] ?? NO_JOINTS;
+  const definition = getExercise(exerciseSlug);
+  if (!definition) {
+    return (
+      <section>
+        <h1>Unknown exercise</h1>
+        <p>“{exerciseSlug}” is not one of the supported exercises.</p>
+      </section>
+    );
+  }
+  return <Workout key={definition.slug} definition={definition} />;
+}
+
+function Workout({ definition }: { definition: ExerciseDefinition }) {
   const { videoRef, state: camera, retry } = useCamera();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // --- tuning → analyzer -------------------------------------------------------
+  const [tuning, setTuning] = useState<Tuning>(() => initialTuning(definition));
+  const [tuningError, setTuningError] = useState<string | null>(null);
+  const analyzerRef = useRef<Analyzer>(createAnalyzer(definition));
+  const logRef = useRef<LogEntry[]>([]);
+  const cueRef = useRef<{ code: ErrorCode; atMs: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      validateThresholds(tuning.thresholds);
+    } catch (err) {
+      setTuningError(err instanceof Error ? err.message : String(err));
+      return; // keep the previous, valid analyzer
+    }
+    setTuningError(null);
+    analyzerRef.current = createAnalyzer(definition, tuning);
+    logRef.current = [];
+    cueRef.current = null;
+  }, [definition, tuning]);
+
+  // --- per-frame processing (refs only) -----------------------------------------
   const lastFrameRef = useRef<PoseFrame | null>(null);
+  const lastOutRef = useRef<AnalyzerOutput | null>(null);
   const framesRef = useRef(0);
-  const lastLogRef = useRef(0);
 
   const onFrame = useCallback(
     (frame: PoseFrame) => {
       lastFrameRef.current = frame;
       framesRef.current += 1;
-      const ctx = canvasRef.current?.getContext('2d');
-      if (ctx) drawSkeleton(ctx, frame.landmarks, { activeJoints, cueActive: false });
+      const out = analyzerRef.current.processFrame(
+        frame.landmarks,
+        frame.videoWidth,
+        frame.videoHeight,
+        frame.timestampMs,
+      );
+      lastOutRef.current = out;
 
-      if (frame.timestampMs - lastLogRef.current >= LOG_EVERY_MS) {
-        lastLogRef.current = frame.timestampMs;
-        console.debug('[pose]', framesRef.current, 'frames; landmarks:', frame.landmarks);
+      if (out.liveCue) cueRef.current = { code: out.liveCue, atMs: frame.timestampMs };
+      if (out.completedRep) {
+        const r = out.completedRep;
+        logRef.current = [
+          { kind: 'rep' as const, index: r.index, score: r.score, errors: r.errors, minAngle: r.minAngle, maxAngle: r.maxAngle, durationMs: r.durationMs, good: isGoodRep(r.score, r.errors) },
+          ...logRef.current,
+        ].slice(0, LOG_LIMIT);
+      }
+      if (out.rejectedRep) {
+        logRef.current = [
+          { kind: 'rejected' as const, reason: out.rejectedRep.reason, cue: out.rejectedRep.cue },
+          ...logRef.current,
+        ].slice(0, LOG_LIMIT);
+      }
+
+      const cueActive = cueRef.current !== null && frame.timestampMs - cueRef.current.atMs < CUE_VISIBLE_MS;
+      const ctx = canvasRef.current?.getContext('2d');
+      if (ctx) {
+        drawSkeleton(ctx, frame.landmarks, {
+          activeJoints: new Set(definition.requiredLandmarks(out.side)),
+          cueActive,
+        });
       }
       if (import.meta.env.DEV) {
-        // Lets automated browser checks read the latest frame. Dev builds only.
-        (window as unknown as { __formcoachLastFrame?: PoseFrame }).__formcoachLastFrame = frame;
+        // Lets automated browser checks read the latest frame and engine output. Dev only.
+        const w = window as unknown as { __formcoachLastFrame?: PoseFrame; __formcoachLastOut?: AnalyzerOutput };
+        w.__formcoachLastFrame = frame;
+        w.__formcoachLastOut = out;
       }
     },
-    [activeJoints],
+    [definition],
   );
 
   const { model, fpsRef } = usePoseLandmarker(videoRef, camera.status === 'ready', onFrame);
 
-  // Debug panel toggled with "D".
+  // --- UI snapshot at 4 Hz ---------------------------------------------------------
+  const [ui, setUi] = useState<{ out: AnalyzerOutput | null; cue: ErrorCode | null; log: LogEntry[]; debug: DebugInfo | null }>({
+    out: null,
+    cue: null,
+    log: [],
+    debug: null,
+  });
+  useEffect(() => {
+    if (model.status !== 'ready') return;
+    const id = setInterval(() => {
+      const f = lastFrameRef.current;
+      const cue = cueRef.current;
+      const now = f?.timestampMs ?? 0;
+      setUi({
+        out: lastOutRef.current,
+        cue: cue && now - cue.atMs < CUE_VISIBLE_MS ? cue.code : null,
+        log: logRef.current,
+        debug: {
+          fps: fpsRef.current,
+          delegate: model.delegate,
+          frames: framesRef.current,
+          videoWidth: f?.videoWidth ?? 0,
+          videoHeight: f?.videoHeight ?? 0,
+          landmarks: f?.landmarks ?? null,
+          engine: lastOutRef.current,
+        },
+      });
+    }, UI_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [model, fpsRef]);
+
+  // --- debug panel toggle ---------------------------------------------------------
   const [showDebug, setShowDebug] = useState(false);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -68,46 +186,97 @@ export default function WorkoutPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const [debug, setDebug] = useState<DebugInfo | null>(null);
-  useEffect(() => {
-    if (model.status !== 'ready') return;
-    const id = setInterval(() => {
-      const f = lastFrameRef.current;
-      setDebug({
-        fps: fpsRef.current,
-        delegate: model.delegate,
-        frames: framesRef.current,
-        videoWidth: f?.videoWidth ?? 0,
-        videoHeight: f?.videoHeight ?? 0,
-        landmarks: f?.landmarks ?? null,
-      });
-    }, UI_REFRESH_MS);
-    return () => clearInterval(id);
-  }, [model, fpsRef]);
+  const resetCounter = () => {
+    analyzerRef.current.reset();
+    logRef.current = [];
+    cueRef.current = null;
+  };
 
+  const goodReps = useMemo(() => ui.log.filter((e) => e.kind === 'rep' && e.good).length, [ui.log]);
   const width = camera.status === 'ready' ? camera.width : 1280;
   const height = camera.status === 'ready' ? camera.height : 720;
 
   return (
-    <section>
-      <h1>Workout</h1>
-      {camera.status === 'error' && (
-        <CameraError kind={camera.kind} detail={camera.detail} onRetry={retry} />
-      )}
+    <section className={styles.page}>
+      <header className={styles.top}>
+        <div>
+          <h1>{definition.name}</h1>
+          <p className={styles.instructions}>{definition.setupInstructions}</p>
+        </div>
+        <div className={styles.counters}>
+          <div className={styles.counter}>
+            <span className={styles.counterValue} data-rep-count>
+              {ui.out?.repCount ?? 0}
+            </span>
+            <span className={styles.counterLabel}>reps</span>
+          </div>
+          <div className={styles.counter}>
+            <span className={`${styles.counterValue} ${styles.good}`}>{goodReps}</span>
+            <span className={styles.counterLabel}>good</span>
+          </div>
+        </div>
+      </header>
+
+      {camera.status === 'error' && <CameraError kind={camera.kind} detail={camera.detail} onRetry={retry} />}
       {camera.status === 'requesting' && <p>Waiting for camera permission…</p>}
-      <VideoCanvas
-        ref={canvasRef}
-        videoRef={videoRef}
-        width={width}
-        height={height}
-        hidden={camera.status === 'error'}
-      />
-      <p className={styles.meta} data-pose-status={model.status}>
-        {model.status === 'loading' && 'Loading pose model…'}
-        {model.status === 'error' && `Pose detection unavailable: ${model.detail}`}
-        {model.status === 'ready' && 'Pose detection running · press D for the debug panel'}
-      </p>
-      {showDebug && debug && <DebugPanel info={debug} />}
+
+      <div className={styles.main}>
+        <div className={styles.videoCol}>
+          <VideoCanvas ref={canvasRef} videoRef={videoRef} width={width} height={height} hidden={camera.status === 'error'} />
+          <div
+            className={`${styles.banner} ${ui.cue ? styles.cueBanner : ui.out && !ui.out.visibilityOk ? styles.warnBanner : ''}`}
+            data-banner
+            role="status"
+          >
+            {ui.cue ? CUE_TEXT[ui.cue] : statusText(ui.out)}
+          </div>
+          <p className={styles.meta} data-pose-status={model.status}>
+            {model.status === 'loading' && 'Loading pose model…'}
+            {model.status === 'error' && `Pose detection unavailable: ${model.detail}`}
+            {model.status === 'ready' && 'Press D for the debug and tuning panel'}
+          </p>
+        </div>
+
+        <aside className={styles.log} aria-label="Rep log">
+          <div className={styles.logHeader}>
+            <h2>Rep log</h2>
+            <button type="button" onClick={resetCounter}>
+              Reset
+            </button>
+          </div>
+          {ui.log.length === 0 && <p className={styles.muted}>Completed and rejected reps appear here.</p>}
+          <ol className={styles.logList} data-rep-log>
+            {ui.log.map((e, i) =>
+              e.kind === 'rep' ? (
+                <li key={i} className={e.good ? styles.logGood : styles.logBad}>
+                  <strong>#{e.index}</strong> score {e.score}
+                  {e.errors.length > 0 && ` · ${e.errors.map((c) => CUE_TEXT[c as ErrorCode]).join(', ')}`}
+                  <span className={styles.muted}>
+                    {' '}
+                    · {e.minAngle.toFixed(0)}–{e.maxAngle.toFixed(0)}° · {(e.durationMs / 1000).toFixed(1)} s
+                  </span>
+                </li>
+              ) : (
+                <li key={i} className={styles.logRejected}>
+                  {REJECT_TEXT[e.reason]}
+                  {e.cue && ` · “${CUE_TEXT[e.cue]}”`}
+                </li>
+              ),
+            )}
+          </ol>
+        </aside>
+      </div>
+
+      {showDebug && ui.debug && (
+        <DebugPanel
+          info={ui.debug}
+          definition={definition}
+          tuning={tuning}
+          tuningError={tuningError}
+          onTuningChange={setTuning}
+          onResetTuning={() => setTuning(initialTuning(definition))}
+        />
+      )}
     </section>
   );
 }

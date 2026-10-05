@@ -237,3 +237,14 @@ describe('determinism', () => {
     expect(analyzer.thresholds.endThreshold).toBe(125);
   });
 });
+
+describe('tunable limits', () => {
+  it('uses definition defaults and accepts overrides by key', () => {
+    expect(createAnalyzer(testExercise).limits).toEqual({ lean: 45 });
+    const leaning = generateSquat({ knee: timeline(START, REP, END), torsoLean: 50 });
+    expect(run(leaning).completed[0].errors).toEqual(['SQUAT_TORSO_LEAN']);
+    // Raising the limit to 55° makes the same 50° lean acceptable.
+    const relaxed = createAnalyzer(testExercise, { limits: { lean: 55 } });
+    expect(run(leaning, relaxed).completed[0].errors).toEqual([]);
+  });
+});

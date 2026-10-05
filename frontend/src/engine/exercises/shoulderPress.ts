@@ -4,7 +4,11 @@
 import type { RepErrorCode } from '../errorCodes';
 import { angleAt, distance } from '../geometry';
 import { LM } from '../landmarks';
-import type { ExerciseDefinition, Pose } from './types';
+import type { ExerciseDefinition, Limits, Pose } from './types';
+
+const ASYM = 'maxArmAsymmetry';
+const WRIST = 'maxWristHeightDiff';
+const FAST = 'tooFastMs';
 
 /** Average elbow angle at or below this = bottom position, hands near shoulders (start). */
 export const PRESS_START_ANGLE = 100;
@@ -42,6 +46,10 @@ export function wristsAboveNose(pose: Pose): boolean {
   return pose[LM.LEFT_WRIST].y < noseY && pose[LM.RIGHT_WRIST].y < noseY;
 }
 
+function isUneven(m: Readonly<Record<string, number>>, limits: Limits): boolean {
+  return m.armAsymmetry > limits[ASYM] || m.wristHeightDiff > limits[WRIST];
+}
+
 export const shoulderPress: ExerciseDefinition = {
   slug: 'shoulder_press',
   name: 'Shoulder Press',
@@ -75,22 +83,20 @@ export const shoulderPress: ExerciseDefinition = {
     };
   },
 
-  evaluateRep(rep) {
+  limits: [
+    { key: ASYM, label: 'Max arm difference', default: PRESS_MAX_ARM_ASYMMETRY, min: 5, max: 60, step: 1, unit: '°' },
+    { key: WRIST, label: 'Max wrist height diff', default: PRESS_MAX_WRIST_HEIGHT_DIFF, min: 0.05, max: 1, step: 0.01, unit: '×' },
+    { key: FAST, label: 'Too fast below', default: PRESS_TOO_FAST_MS, min: 600, max: 2000, step: 50, unit: 'ms' },
+  ],
+
+  evaluateRep(rep, limits) {
     const errors: RepErrorCode[] = [];
-    if (
-      rep.maxMetrics.armAsymmetry > PRESS_MAX_ARM_ASYMMETRY ||
-      rep.maxMetrics.wristHeightDiff > PRESS_MAX_WRIST_HEIGHT_DIFF
-    ) {
-      errors.push('PRESS_UNEVEN');
-    }
-    if (rep.durationMs < PRESS_TOO_FAST_MS) errors.push('PRESS_TOO_FAST');
+    if (isUneven(rep.maxMetrics, limits)) errors.push('PRESS_UNEVEN');
+    if (rep.durationMs < limits[FAST]) errors.push('PRESS_TOO_FAST');
     return errors;
   },
 
-  liveCue: (m) =>
-    m.armAsymmetry > PRESS_MAX_ARM_ASYMMETRY || m.wristHeightDiff > PRESS_MAX_WRIST_HEIGHT_DIFF
-      ? 'PRESS_UNEVEN'
-      : null,
+  liveCue: (m, _state, limits) => (isUneven(m, limits) ? 'PRESS_UNEVEN' : null),
 
   partialCue: 'PRESS_PARTIAL',
 

@@ -6,6 +6,9 @@ import { LM } from '../landmarks';
 import type { Side } from '../visibility';
 import type { ExerciseDefinition } from './types';
 
+const LEAN = 'maxTorsoLean';
+const FAST = 'tooFastMs';
+
 /** Knee angle at or above this = standing (start position). */
 export const SQUAT_START_ANGLE = 160;
 /** Knee angle below this = the rep has begun (15° hysteresis gap below standing). */
@@ -59,14 +62,19 @@ export const squat: ExerciseDefinition = {
     return { torsoLean: angleFromVertical(pose[c.hip], pose[c.shoulder]) };
   },
 
-  evaluateRep(rep) {
+  limits: [
+    { key: LEAN, label: 'Max torso lean', default: SQUAT_MAX_TORSO_LEAN, min: 20, max: 80, step: 1, unit: '°' },
+    { key: FAST, label: 'Too fast below', default: SQUAT_TOO_FAST_MS, min: 600, max: 2500, step: 50, unit: 'ms' },
+  ],
+
+  evaluateRep(rep, limits) {
     const errors: RepErrorCode[] = [];
-    if (rep.maxMetrics.torsoLean > SQUAT_MAX_TORSO_LEAN) errors.push('SQUAT_TORSO_LEAN');
-    if (rep.durationMs < SQUAT_TOO_FAST_MS) errors.push('SQUAT_TOO_FAST');
+    if (rep.maxMetrics.torsoLean > limits[LEAN]) errors.push('SQUAT_TORSO_LEAN');
+    if (rep.durationMs < limits[FAST]) errors.push('SQUAT_TOO_FAST');
     return errors;
   },
 
-  liveCue: (metrics) => (metrics.torsoLean > SQUAT_MAX_TORSO_LEAN ? 'SQUAT_TORSO_LEAN' : null),
+  liveCue: (metrics, _state, limits) => (metrics.torsoLean > limits[LEAN] ? 'SQUAT_TORSO_LEAN' : null),
 
   partialCue: 'SQUAT_SHALLOW',
 

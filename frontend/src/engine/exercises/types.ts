@@ -24,6 +24,20 @@ export interface RepData {
   maxMetrics: FrameMetrics;
 }
 
+/** A form-error limit that can be tuned live from the debug panel. */
+export interface TunableLimit {
+  key: string;
+  label: string;
+  default: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: '°' | 'ms' | '×';
+}
+
+/** Current limit values by key (defaults merged with any overrides). */
+export type Limits = Readonly<Record<string, number>>;
+
 export interface ExerciseDefinition {
   slug: ExerciseSlug;
   name: string;
@@ -40,17 +54,23 @@ export interface ExerciseDefinition {
   endConditionOk?(pose: Pose, side: Side | null): boolean;
   /** Computed every valid frame; the analyzer keeps the per-rep maximum of each. */
   frameMetrics(pose: Pose, side: Side | null): FrameMetrics;
+  /** Form-error limits used by evaluateRep / liveCue / reversalCue, tunable at runtime. */
+  limits: readonly TunableLimit[];
   /** Errors for a completed (counted) rep. The score comes from scoring.ts. */
-  evaluateRep(rep: RepData): RepErrorCode[];
+  evaluateRep(rep: RepData, limits: Limits): RepErrorCode[];
   /** Real-time warning mid-rep, or null. */
-  liveCue?(metrics: FrameMetrics, state: RepState): ErrorCode | null;
+  liveCue?(metrics: FrameMetrics, state: RepState, limits: Limits): ErrorCode | null;
   /** Cue for a partial rep that travelled far enough (e.g. SQUAT_SHALLOW → "Go lower"). */
   partialCue: LiveOnlyCode;
   /**
    * Called when the user turns back toward the end before returning to start
    * (e.g. re-curling without extending). Return a cue code or null.
    */
-  reversalCue?(peakAngle: number): ErrorCode | null;
+  reversalCue?(peakAngle: number, limits: Limits): ErrorCode | null;
   /** Shown on the setup screen. */
   setupInstructions: string;
+}
+
+export function defaultLimits(definition: ExerciseDefinition): Record<string, number> {
+  return Object.fromEntries(definition.limits.map((l) => [l.key, l.default]));
 }

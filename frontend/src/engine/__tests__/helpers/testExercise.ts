@@ -31,8 +31,9 @@ export const testExercise: ExerciseDefinition = {
     const c = chain(side);
     return { torsoLean: angleFromVertical(p[c.h], p[c.s]) };
   },
-  evaluateRep: (rep) => (rep.maxMetrics.torsoLean > TEST_LEAN_LIMIT ? ['SQUAT_TORSO_LEAN'] : []),
-  liveCue: (m) => (m.torsoLean > TEST_LEAN_LIMIT ? 'SQUAT_TORSO_LEAN' : null),
+  limits: [{ key: 'lean', label: 'Lean', default: TEST_LEAN_LIMIT, min: 0, max: 90, step: 1, unit: '°' }],
+  evaluateRep: (rep, limits) => (rep.maxMetrics.torsoLean > limits.lean ? ['SQUAT_TORSO_LEAN'] : []),
+  liveCue: (m, _state, limits) => (m.torsoLean > limits.lean ? 'SQUAT_TORSO_LEAN' : null),
   partialCue: 'SQUAT_SHALLOW',
   setupInstructions: 'test',
 };

@@ -339,7 +339,10 @@ Reset the filter when tracking is lost.
 ### 8.5 Visibility gate (`visibility.ts`)
 
 Each exercise declares its **required landmarks**. A frame is valid only if all required landmarks
-have `visibility >= 0.6` (`MIN_VISIBILITY`).
+have `visibility >= 0.6` (`MIN_VISIBILITY`) **and** lie inside the frame (normalized x and y within
+`[-FRAME_MARGIN, 1 + FRAME_MARGIN]`, `FRAME_MARGIN = 0.02`). Found in T-13: MediaPipe can report
+visibility ≈ 0.99 for joints it is only guessing (e.g. knees cut off by the frame edge), so
+visibility alone is not enough.
 
 - For side-view exercises, compute the average visibility of the left-side chain and the right-side
   chain, and use the more visible side for the whole set. Re-evaluate only between reps, not mid-rep.
@@ -618,7 +621,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 - [x] **T-11 Camera hook** — permission handling, friendly error if denied or no camera.
 - [x] **T-12 Pose landmarker hook** — model + WASM loaded locally per §9, GPU→CPU fallback, rAF loop.
       _AC:_ landmarks logged per frame; ≥ 20 fps.
-- [ ] **T-13 Skeleton overlay + debug panel** — draw skeleton on canvas, mirrored display, FPS and raw visibility values in debug panel.
+- [x] **T-13 Skeleton overlay + debug panel** — draw skeleton on canvas, mirrored display, FPS and raw visibility values in debug panel.
       _AC:_ skeleton tracks the user smoothly and lines up with the body.
 
 ### Milestone 3 — Engine core (most important — test heavily)

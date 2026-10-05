@@ -1,18 +1,3 @@
-.stage {
-  max-width: 960px;
-  aspect-ratio: 16 / 9;
-  background: #000;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transform: scaleX(-1);
-}
-
 .meta {
   color: var(--text-muted);
   font-size: 14px;

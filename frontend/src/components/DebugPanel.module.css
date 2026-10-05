@@ -1,0 +1,85 @@
+.panel {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  width: 300px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(23, 26, 33, 0.95);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  z-index: 10;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.panel h3 {
+  margin: 16px 0 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.grid dt {
+  color: var(--text-muted);
+}
+
+.grid dd {
+  margin: 0;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table td {
+  padding: 2px 0;
+}
+
+.num {
+  text-align: right;
+  padding-right: 8px !important;
+  width: 40px;
+}
+
+.barCell {
+  width: 80px;
+}
+
+.bar {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ok);
+}
+
+.low {
+  color: var(--error);
+}
+
+.low .bar {
+  background: var(--error);
+}
+
+.none,
+.hint {
+  color: var(--text-muted);
+}
+
+.hint {
+  margin: 12px 0 0;
+  font-size: 11px;
+}

@@ -146,13 +146,13 @@ The project is built ticket by ticket; this list is updated after every ticket.
 - [x] T-22 Shoulder press
 - [x] T-23 Live tuning sliders in the debug panel (+ orientation check and "not counted" feedback after the first live test)
 
-### Milestone 5 — Workout flow & persistence (in progress)
+### Milestone 5 — Workout flow & persistence ✅
 
 - [x] T-24 Home page — user picker/creator, exercise cards
 - [x] T-25 Workout page — setup checklist, 3-2-1 countdown, live counters, banner, angle gauge
 - [x] T-26 Persist session — reps saved live with a retry queue (survives a backend outage)
 - [x] T-27 Voice & feedback — spoken rep counts and cues (3 s cooldown), "Great rep!", mute button (`M`)
-- [ ] T-28 Summary page
+- [x] T-28 Summary page — totals, per-rep table, most common mistake with a tip, delete
 
 ### Milestone 6 — History & polish
 

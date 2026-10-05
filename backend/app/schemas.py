@@ -2,11 +2,25 @@
 
 import uuid
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StringConstraints,
+    model_validator,
+)
+
+from app.error_codes import RepErrorCode
 
 ExerciseSlug = Literal["squat", "bicep_curl", "shoulder_press"]
+
+# Upper bound for a stored rep's duration. The engine discards reps > 8 s (MAX_REP_MS);
+# this only rejects obviously broken data.
+MAX_REP_DURATION_MS = 60_000
 
 
 class ORMModel(BaseModel):
@@ -38,3 +52,65 @@ class ExerciseOut(ORMModel):
     body_part: Literal["legs", "arms", "shoulders"]
     camera_view: Literal["side", "front"]
     instructions: str
+
+
+# --- sessions & reps -------------------------------------------------------
+
+
+class SessionCreate(BaseModel):
+    user_id: uuid.UUID
+    exercise_slug: ExerciseSlug
+
+
+class RepCreate(BaseModel):
+    rep_index: int = Field(ge=1)
+    started_at: AwareDatetime
+    duration_ms: int = Field(ge=0, le=MAX_REP_DURATION_MS)
+    min_angle: float = Field(ge=0, le=180)
+    max_angle: float = Field(ge=0, le=180)
+    score: int = Field(ge=0, le=100)
+    errors: list[RepErrorCode] = Field(default_factory=list, max_length=10)
+    metrics: dict[str, JsonValue] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        if self.min_angle > self.max_angle:
+            raise ValueError("min_angle must be <= max_angle")
+        if len(set(self.errors)) != len(self.errors):
+            raise ValueError("errors must not contain duplicates")
+        # Two decimals is what the DB stores; round now so idempotency checks compare equal.
+        self.min_angle = round(self.min_angle, 2)
+        self.max_angle = round(self.max_angle, 2)
+        return self
+
+
+class RepOut(ORMModel):
+    id: uuid.UUID
+    rep_index: int
+    started_at: datetime
+    duration_ms: int
+    min_angle: float
+    max_angle: float
+    score: int
+    errors: list[str]
+    metrics: dict[str, JsonValue]
+
+
+class SessionFinish(BaseModel):
+    ended_at: AwareDatetime
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    exercise_slug: ExerciseSlug
+    started_at: datetime
+    ended_at: datetime | None
+    total_reps: int
+    good_reps: int
+    avg_score: float | None
+    duration_ms: int | None
+
+
+class SessionDetail(SessionOut):
+    reps: list[RepOut]

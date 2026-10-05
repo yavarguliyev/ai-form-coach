@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import exercises, health, sessions, users
+from app.routers import exercises, health, sessions, stats, users
 
 app = FastAPI(
     title="FormCoach API",
@@ -21,3 +21,4 @@ app.include_router(health.router)
 app.include_router(users.router)
 app.include_router(exercises.router)
 app.include_router(sessions.router)
+app.include_router(stats.router)

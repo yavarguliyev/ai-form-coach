@@ -609,7 +609,7 @@ Work top to bottom. Don't start a milestone until the previous one is done.
 - [x] **T-07 Users & exercises endpoints** — per §7.
 - [x] **T-08 Sessions & reps endpoints** — create, add rep, finish (server-side aggregates), list, get, delete.
       _AC:_ validation errors return 422; posting to finished session returns 409; aggregates correct.
-- [ ] **T-09 Stats endpoint** — `/api/users/{id}/stats` per §7.
+- [x] **T-09 Stats endpoint** — `/api/users/{id}/stats` per §7.
 - [ ] **T-10 Backend tests** — pytest covering T-07..T-09 against a test database.
       _AC:_ `make test` green.
 

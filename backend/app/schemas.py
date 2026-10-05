@@ -114,3 +114,38 @@ class SessionOut(BaseModel):
 
 class SessionDetail(SessionOut):
     reps: list[RepOut]
+
+
+# --- stats -----------------------------------------------------------------
+
+
+class SessionPoint(BaseModel):
+    """One session, as a point on the History charts."""
+
+    id: uuid.UUID
+    started_at: datetime
+    total_reps: int
+    good_reps: int
+    avg_score: float | None
+
+
+class ErrorCount(BaseModel):
+    code: str
+    count: int
+
+
+class ExerciseStats(BaseModel):
+    exercise_slug: ExerciseSlug
+    exercise_name: str
+    total_sessions: int
+    total_reps: int
+    good_reps: int
+    avg_score: float | None  # mean over all reps, not over session averages
+    best_session: SessionPoint | None
+    recent_sessions: list[SessionPoint]  # last N, oldest first (chart order)
+    top_errors: list[ErrorCount]  # most frequent first
+
+
+class UserStats(BaseModel):
+    user_id: uuid.UUID
+    exercises: list[ExerciseStats]

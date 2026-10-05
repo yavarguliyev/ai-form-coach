@@ -20,6 +20,8 @@ def test_new_user_gets_all_exercises_with_zeros(client: TestClient, user_id: str
         "total_sessions": 0,
         "total_reps": 0,
         "good_reps": 0,
+        "missed_reps": 0,
+        "attempts": 0,
         "avg_score": None,
         "best_session": None,
         "recent_sessions": [],

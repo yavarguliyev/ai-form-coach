@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -74,7 +75,13 @@ class Session(Base):
     # Aggregates below are recomputed by the server from `reps` on finish
     total_reps: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     good_reps: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    # Set score: average over attempts, a missed attempt counts as 0 (see aggregates.py).
     avg_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    # Average over counted reps only.
+    counted_avg_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    missed_reps: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    unseen_reps: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
 
     user: Mapped[User] = relationship(back_populates="sessions")
@@ -106,7 +113,10 @@ class Rep(Base):
     duration_ms: Mapped[int] = mapped_column(Integer)
     min_angle: Mapped[Decimal] = mapped_column(Numeric(6, 2))  # primary angle min during rep
     max_angle: Mapped[Decimal] = mapped_column(Numeric(6, 2))  # primary angle max during rep
-    score: Mapped[int] = mapped_column(Integer)  # 0..100
+    score: Mapped[int] = mapped_column(Integer)  # 0..100 (0 for a missed attempt)
+    # False = an attempt that was not counted; miss_reason says why.
+    counted: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    miss_reason: Mapped[str | None] = mapped_column(Text)
     errors: Mapped[list[str]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
@@ -121,6 +131,11 @@ class Rep(Base):
         CheckConstraint("rep_index >= 1", name="ck_reps_rep_index"),
         CheckConstraint("score BETWEEN 0 AND 100", name="ck_reps_score"),
         CheckConstraint("duration_ms >= 0", name="ck_reps_duration"),
+        CheckConstraint(
+            "(counted AND miss_reason IS NULL) OR (NOT counted AND miss_reason IN "
+            "('partial', 'too_short', 'too_long', 'lost_tracking') AND score = 0)",
+            name="ck_reps_miss",
+        ),
         CheckConstraint(
             "min_angle BETWEEN 0 AND 180 AND max_angle BETWEEN 0 AND 180",
             name="ck_reps_angles",

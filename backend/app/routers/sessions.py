@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.aggregates import recompute_session_aggregates
 from app.db import DbSession
-from app.error_codes import EXERCISE_ERROR_CODES
+from app.error_codes import EXERCISE_ERROR_CODES, EXERCISE_MISS_CODES
 from app.models import Exercise, Rep, Session, User
 from app.schemas import (
     ExerciseSlug,
@@ -41,7 +41,13 @@ def _session_out(session: Session) -> SessionOut:
         ended_at=session.ended_at,
         total_reps=session.total_reps,
         good_reps=session.good_reps,
+        missed_reps=session.missed_reps,
+        unseen_reps=session.unseen_reps,
+        attempts=session.attempts,
         avg_score=float(session.avg_score) if session.avg_score is not None else None,
+        counted_avg_score=(
+            float(session.counted_avg_score) if session.counted_avg_score is not None else None
+        ),
         duration_ms=session.duration_ms,
     )
 
@@ -66,6 +72,8 @@ def _same_rep(rep: Rep, body: RepCreate) -> bool:
         and rep.score == body.score
         and rep.errors == body.errors
         and rep.metrics == body.metrics
+        and rep.counted == body.counted
+        and rep.miss_reason == body.miss_reason
     )
 
 
@@ -100,7 +108,8 @@ def create_session(body: SessionCreate, db: DbSession) -> SessionOut:
 def add_rep(session_id: uuid.UUID, body: RepCreate, response: Response, db: DbSession) -> RepOut:
     session = _get_session(db, session_id, lock=True)
 
-    allowed = EXERCISE_ERROR_CODES[session.exercise.slug]
+    codes = EXERCISE_ERROR_CODES if body.counted else EXERCISE_MISS_CODES
+    allowed = codes[session.exercise.slug]
     if invalid := [e for e in body.errors if e not in allowed]:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

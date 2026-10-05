@@ -14,7 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.error_codes import RepErrorCode
+from app.error_codes import MissErrorCode, MissReason, RepErrorCode
 
 ExerciseSlug = Literal["squat", "bicep_curl", "shoulder_press"]
 
@@ -63,14 +63,18 @@ class SessionCreate(BaseModel):
 
 
 class RepCreate(BaseModel):
+    """One rep ATTEMPT, in attempt order. counted=False = an attempt that didn't count."""
+
     rep_index: int = Field(ge=1)
     started_at: AwareDatetime
     duration_ms: int = Field(ge=0, le=MAX_REP_DURATION_MS)
     min_angle: float = Field(ge=0, le=180)
     max_angle: float = Field(ge=0, le=180)
     score: int = Field(ge=0, le=100)
-    errors: list[RepErrorCode] = Field(default_factory=list, max_length=10)
+    errors: list[RepErrorCode | MissErrorCode] = Field(default_factory=list, max_length=10)
     metrics: dict[str, JsonValue] = Field(default_factory=dict)
+    counted: bool = True
+    miss_reason: MissReason | None = None
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -78,6 +82,13 @@ class RepCreate(BaseModel):
             raise ValueError("min_angle must be <= max_angle")
         if len(set(self.errors)) != len(self.errors):
             raise ValueError("errors must not contain duplicates")
+        if self.counted and self.miss_reason is not None:
+            raise ValueError("a counted rep has no miss_reason")
+        if not self.counted:
+            if self.miss_reason is None:
+                raise ValueError("an attempt that was not counted needs a miss_reason")
+            if self.score != 0:
+                raise ValueError("an attempt that was not counted scores 0")
         # Two decimals is what the DB stores; round now so idempotency checks compare equal.
         self.min_angle = round(self.min_angle, 2)
         self.max_angle = round(self.max_angle, 2)
@@ -94,6 +105,8 @@ class RepOut(ORMModel):
     score: int
     errors: list[str]
     metrics: dict[str, JsonValue]
+    counted: bool
+    miss_reason: str | None
 
 
 class SessionFinish(BaseModel):
@@ -106,9 +119,13 @@ class SessionOut(BaseModel):
     exercise_slug: ExerciseSlug
     started_at: datetime
     ended_at: datetime | None
-    total_reps: int
+    total_reps: int  # counted reps
     good_reps: int
-    avg_score: float | None
+    missed_reps: int  # attempts not counted (the user's miss)
+    unseen_reps: int  # attempts the camera lost (not penalized)
+    attempts: int  # total_reps + missed_reps
+    avg_score: float | None  # set score: missed attempts count as 0
+    counted_avg_score: float | None  # average of counted reps only
     duration_ms: int | None
 
 
@@ -126,6 +143,8 @@ class SessionPoint(BaseModel):
     started_at: datetime
     total_reps: int
     good_reps: int
+    missed_reps: int
+    attempts: int
     avg_score: float | None
 
 
@@ -138,9 +157,11 @@ class ExerciseStats(BaseModel):
     exercise_slug: ExerciseSlug
     exercise_name: str
     total_sessions: int
-    total_reps: int
+    total_reps: int  # counted
     good_reps: int
-    avg_score: float | None  # mean over all reps, not over session averages
+    missed_reps: int
+    attempts: int
+    avg_score: float | None  # over all attempts (missed = 0), not over session averages
     best_session: SessionPoint | None
     recent_sessions: list[SessionPoint]  # last N, oldest first (chart order)
     top_errors: list[ErrorCount]  # most frequent first

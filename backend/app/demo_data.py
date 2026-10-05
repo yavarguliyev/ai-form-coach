@@ -42,6 +42,10 @@ class Profile:
     metric: str  # per-rep metric stored like the real app (max_<frameMetric>)
     metric_ok: tuple[float, float]
     metric_bad: tuple[float, float]
+    partial_code: str  # stored on "not deep enough" misses
+    # (min, max) primary-angle ranges for an attempt that stopped short
+    shallow_low: tuple[float, float]
+    shallow_high: tuple[float, float]
 
 
 PROFILES: dict[str, Profile] = {
@@ -54,6 +58,9 @@ PROFILES: dict[str, Profile] = {
         "max_torsoLean",
         (18, 40),
         (47, 62),
+        "SQUAT_SHALLOW",
+        (108, 132),
+        (161, 170),
     ),
     "bicep_curl": Profile(
         "CURL_ELBOW_SWING",
@@ -64,6 +71,9 @@ PROFILES: dict[str, Profile] = {
         "max_upperArmSwing",
         (6, 20),
         (27, 40),
+        "CURL_PARTIAL",
+        (62, 95),
+        (151, 166),
     ),
     "shoulder_press": Profile(
         "PRESS_UNEVEN",
@@ -74,6 +84,9 @@ PROFILES: dict[str, Profile] = {
         "max_armAsymmetry",
         (3, 14),
         (22, 34),
+        "PRESS_PARTIAL",
+        (92, 100),
+        (128, 150),
     ),
 }
 
@@ -82,6 +95,33 @@ def remove_demo_sessions(db: DbSession) -> int:
     demo_session_ids = select(Rep.session_id).where(Rep.metrics[DEMO_FLAG].as_boolean().is_(True))
     result = db.execute(delete(Session).where(Session.id.in_(demo_session_ids)))
     return result.rowcount or 0
+
+
+def _add_missed_attempt(
+    db: DbSession, rng: random.Random, session: Session, profile: Profile, index: int, t: datetime
+) -> datetime:
+    """An attempt that didn't count: mostly not deep enough, sometimes too fast."""
+    shallow = rng.random() < 0.75
+    duration = rng.randint(1200, 2000) if shallow else rng.randint(380, 560)
+    low, high = (
+        (profile.shallow_low, profile.shallow_high) if shallow else (profile.low, profile.high)
+    )
+    db.add(
+        Rep(
+            session_id=session.id,
+            rep_index=index,
+            started_at=t,
+            duration_ms=duration,
+            min_angle=round(rng.uniform(*low), 2),
+            max_angle=round(rng.uniform(*high), 2),
+            score=0,
+            errors=[profile.partial_code if shallow else profile.too_fast],
+            metrics={DEMO_FLAG: True},
+            counted=False,
+            miss_reason="partial" if shallow else "too_short",
+        )
+    )
+    return t + timedelta(milliseconds=duration + rng.randint(600, 1500))
 
 
 def _make_session(
@@ -100,8 +140,12 @@ def _make_session(
 
     p_form = 0.45 - 0.35 * progress  # 45 % of reps → 10 %
     p_fast = 0.25 - 0.18 * progress
+    p_miss = 0.35 - 0.30 * progress  # attempts that don't count: 35 % → 5 %
     t = started + timedelta(seconds=4)
-    for index in range(1, rng.randint(8, 12) + 1):
+    for index in range(1, rng.randint(9, 13) + 1):
+        if rng.random() < p_miss:
+            t = _add_missed_attempt(db, rng, session, profile, index, t)
+            continue
         form = rng.random() < p_form
         fast = rng.random() < p_fast
         errors = ([profile.form_error] if form else []) + ([profile.too_fast] if fast else [])

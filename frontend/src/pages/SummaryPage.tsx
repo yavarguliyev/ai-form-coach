@@ -5,6 +5,7 @@ import { CUE_TEXT, FORM_ERROR_CODES, isRepErrorCode, type RepErrorCode } from '.
 import { getExercise } from '../engine/exercises';
 import { isGoodRep } from '../engine/scoring';
 import { MISTAKE_TIPS } from '../feedback/tips';
+import { formatDuration } from '../format';
 import styles from './SummaryPage.module.css';
 
 type Load =
@@ -12,12 +13,6 @@ type Load =
   | { status: 'ready'; session: SessionDetail }
   | { status: 'not-found' }
   | { status: 'error'; message: string };
-
-export function formatDuration(ms: number | null): string {
-  if (ms === null) return '—';
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
-}
 
 function scoreTone(score: number | null): string {
   if (score === null) return styles.muted;

@@ -64,7 +64,7 @@ touches other Docker projects, and it keeps a base image (like `postgres`) if an
    countdown starts by itself.
 3. Exercise. Reps that count show up in the big counter; mistakes and reps that don't count are
    shown on the video. Press **Finish set** when you're done.
-4. **History** will show your past workouts and progress charts (coming soon).
+4. **History** shows your past sets, progress charts and most common mistakes per exercise.
 
 Tip: press **D** during a workout to open the debug panel (live angles and tuning sliders).
 
@@ -156,7 +156,7 @@ The project is built ticket by ticket; this list is updated after every ticket.
 
 ### Milestone 6 — History & polish
 
-- [ ] T-29 History page with charts
+- [x] T-29 History page — exercise tabs, stat tiles, score line + reps-per-set charts (Recharts), sets table, top mistakes
 - [ ] T-30 Visual polish
 - [ ] T-31 Demo data script (`make demo-data`)
 - [ ] T-32 README & presentation script
